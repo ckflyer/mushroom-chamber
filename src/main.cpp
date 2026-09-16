@@ -12,7 +12,6 @@
 #include <ESPmDNS.h>
 #include <WiFiManager.h>
 #include <ESPAsyncWebServer.h>
-#include <AsyncJson.h>
 #include <Update.h>
 #include <esp_task_wdt.h>
 
@@ -29,6 +28,28 @@ History hist;
 AsyncWebServer server(80);
 uint32_t lastTick = 0;
 volatile bool shouldReboot = false;
+
+// Reconnect quietly in the background if WiFi drops or never came up.
+// The chamber keeps running either way; this only restores the dashboard.
+static void wifiWatch() {
+  static uint32_t last = 0;
+  static bool wasUp = false;
+  bool up = WiFi.status() == WL_CONNECTED;
+
+  if (up && !wasUp) {
+    Serial.print("[wifi] connected, ip ");
+    Serial.println(WiFi.localIP());
+    MDNS.begin("chamber");
+  }
+  wasUp = up;
+
+  if (!up && millis() - last > 30000) {
+    last = millis();
+    Serial.printf("[wifi] retrying, status %d\n", WiFi.status());
+    WiFi.disconnect();
+    WiFi.begin();
+  }
+}
 
 // ---- API -------------------------------------------------------------------
 
@@ -92,15 +113,32 @@ static void setupRoutes() {
   server.on("/api/config", HTTP_GET, sendConfig);
   server.on("/api/history", HTTP_GET, sendHistory);
 
-  auto* cfgHandler = new AsyncCallbackJsonWebHandler(
-    "/api/config", [](AsyncWebServerRequest* req, JsonVariant& json) {
-      configFromJson(json.as<JsonObjectConst>());
+  // Settings come in as a JSON body. Parsed by hand rather than with
+  // AsyncCallbackJsonWebHandler, whose constructor signature changes between
+  // ESPAsyncWebServer releases.
+  server.on("/api/config", HTTP_POST,
+    [](AsyncWebServerRequest* r) { /* answered from the body handler */ },
+    NULL,
+    [](AsyncWebServerRequest* r, uint8_t* data, size_t len,
+       size_t index, size_t total) {
+      static String body;
+      if (index == 0) { body = ""; body.reserve(total + 1); }
+      for (size_t i = 0; i < len; i++) body += (char)data[i];
+      if (index + len < total) return;   // more chunks still coming
+
+      JsonDocument d;
+      DeserializationError err = deserializeJson(d, body);
+      body = "";
+      if (err) {
+        r->send(400, "application/json", "{\"ok\":false,\"error\":\"bad json\"}");
+        return;
+      }
+      configFromJson(d.as<JsonObjectConst>());
       configSave();
       // A mode change should take effect immediately, not on the next burst.
       if (cfg.foggerMode == FOG_NONE) fog::allOff();
-      sendConfig(req);
+      sendConfig(r);
     });
-  server.addHandler(cfgHandler);
 
   server.on("/api/fog-burst", HTTP_POST, [](AsyncWebServerRequest* r) {
     st.forceBurst = true;
@@ -187,12 +225,58 @@ void setup() {
   fog::allOff();
   ctrl::begin();
 
-  WiFiManager wm;
-  wm.setConfigPortalTimeout(180);
-  if (!wm.autoConnect("Chamber-Setup")) {
+  WiFi.mode(WIFI_STA);
+  WiFi.setSleep(false);
+  WiFi.setAutoReconnect(true);
+
+  // The driver knows exactly why a join failed. Ask it.
+  WiFi.onEvent([](WiFiEvent_t, WiFiEventInfo_t info) {
+    uint8_t r = info.wifi_sta_disconnected.reason;
+    const char* why = "see the espressif reason code list";
+    switch (r) {
+      case 2:   why = "auth expired"; break;
+      case 4:   why = "association expired"; break;
+      case 15:  why = "handshake timeout - wrong password, or WPA3"; break;
+      case 201: why = "network not found - 2.4GHz only, check the name"; break;
+      case 202: why = "auth failed - wrong password"; break;
+      case 203: why = "association failed"; break;
+      case 204: why = "handshake timeout"; break;
+      case 205: why = "connection failed"; break;
+    }
+    Serial.printf("[wifi] disconnected, reason %u: %s\n", r, why);
+  }, ARDUINO_EVENT_WIFI_STA_DISCONNECTED);
+
+  // WiFiManager's portal owns port 80. It is scoped in a block so its
+  // destructor runs and releases the port BEFORE our server binds it,
+  // otherwise server.begin() fails with "bind error: -8" and there is no
+  // dashboard.
+  bool wifiOk = false;
+  {
+    WiFiManager wm;
+    wm.setDebugOutput(true);
+    wm.setConfigPortalTimeout(180);
+    wm.setConnectTimeout(25);
+    // One attempt only. WiFiManager fires its retries before the previous
+    // attempt has finished, which the driver rejects with 0x3007. The
+    // background watcher below retries properly, spaced out.
+    wm.setConnectRetries(1);
+
+    wifiOk = wm.autoConnect("Chamber-Setup");
+    wm.stopConfigPortal();
+    wm.stopWebPortal();
+  }
+  delay(300);   // let the sockets actually close
+
+  if (!wifiOk) {
     // No WiFi is not a reason to stop growing mushrooms. Carry on headless;
     // the control loop does not need the network.
-    Serial.println("[wifi] no connection, running offline");
+    Serial.printf("[wifi] not connected, status %d, running offline\n",
+                  WiFi.status());
+    Serial.println("[wifi]  3 = connected   4 = wrong password or rejected");
+    Serial.println("[wifi]  1 = no such network (2.4GHz only, check the name)");
+    Serial.println("[wifi]  6 = disconnected");
+    WiFi.mode(WIFI_STA);
+    WiFi.begin();                // keep retrying quietly in the background
   } else {
     Serial.print("[wifi] ip ");
     Serial.println(WiFi.localIP());
@@ -229,6 +313,7 @@ void loop() {
     lastTick += 1000;
     if (now - lastTick > 5000) lastTick = now;  // recover from a long stall
     ctrl::tick();
+    wifiWatch();
     esp_task_wdt_reset();
   }
   ha::loop();
