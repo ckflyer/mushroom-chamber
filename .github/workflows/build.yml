@@ -1,3 +1,12 @@
+# Builds the firmware automatically. You never have to build a release by hand.
+#
+#   Push to main            -> builds, and the .bin is downloadable from the
+#                              Actions tab for a few days. Good for testing.
+#   Push a tag like v1.1.0  -> builds AND creates a Release with the .bin
+#                              attached, which is what people download.
+#
+# Nothing to install or configure. GitHub runs this for free on public repos.
+
 name: Build firmware
 
 on:
@@ -5,10 +14,10 @@ on:
     branches: [main]
     tags: ['v*']
   pull_request:
-  workflow_dispatch:
+  workflow_dispatch:      # adds a "Run workflow" button in the Actions tab
 
 permissions:
-  contents: write
+  contents: write         # needed to attach the .bin to a release
 
 jobs:
   build:
@@ -20,6 +29,7 @@ jobs:
         with:
           python-version: '3.11'
 
+      # Caching makes later builds finish in under a minute instead of ~5.
       - name: Cache PlatformIO
         uses: actions/cache@v4
         with:
@@ -37,12 +47,14 @@ jobs:
       - name: Name the file
         run: cp .pio/build/esp32dev/firmware.bin chamber-firmware.bin
 
+      # Always available from the Actions tab, tagged or not.
       - name: Upload build artifact
         uses: actions/upload-artifact@v4
         with:
           name: chamber-firmware
           path: chamber-firmware.bin
 
+      # Only on a version tag: publish a Release people can download from.
       - name: Publish release
         if: startsWith(github.ref, 'refs/tags/v')
         uses: softprops/action-gh-release@v2

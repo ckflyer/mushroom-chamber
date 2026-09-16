@@ -82,8 +82,8 @@ static void sendHistory(AsyncWebServerRequest* req) {
 static void setupRoutes() {
   server.on("/", HTTP_GET, [](AsyncWebServerRequest* r) {
     AsyncWebServerResponse* res =
-      r->beginResponse_P(200, "text/html", (const uint8_t*)INDEX_HTML,
-                         strlen_P(INDEX_HTML));
+      r->beginResponse(200, "text/html", (const uint8_t*)INDEX_HTML,
+                       strlen_P(INDEX_HTML));
     res->addHeader("Cache-Control", "no-store");
     r->send(res);
   });
@@ -150,6 +150,8 @@ static void setupRoutes() {
         // never leave the fogger running.
         st.updating = true;
         fog::allOff();
+        // No interrupts while flash is being written.
+        detachInterrupt(digitalPinToInterrupt(PIN_FAN_TACH));
         if (!Update.begin(UPDATE_SIZE_UNKNOWN)) {
           Update.printError(Serial);
           st.updating = false;

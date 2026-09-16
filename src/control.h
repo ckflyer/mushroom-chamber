@@ -78,10 +78,16 @@ namespace ctrl {
 
 inline Adafruit_SHT31 sht;
 inline bool shtOk = false;
-inline volatile uint32_t tachPulses = 0;
 inline uint32_t lastTach = 0, lastHist = 0;
 
-inline void IRAM_ATTR tachISR() { tachPulses++; }
+// NOT inline. An inline function placed in IRAM trips an xtensa linker bug:
+// "dangerous relocation: l32r: literal placed after use". Internal linkage
+// in this single translation unit avoids it. IRAM_ATTR must stay, because
+// the fan keeps spinning during a firmware write and an ISR living in flash
+// would crash once the flash cache is disabled.
+static volatile uint32_t tachPulses = 0;
+
+static void IRAM_ATTR tachISR() { tachPulses++; }
 
 inline void begin() {
   Wire.begin(PIN_SDA, PIN_SCL);
