@@ -60,6 +60,13 @@ struct State {
   uint16_t fanTestS = 0;
   bool     forceBurst = false;
   bool     updating = false;   // true while firmware is being written
+
+  // Dry reservoir detection. A burst that produces no humidity rise, three
+  // times running, means the tank is empty or the disc is fouled.
+  float    burstStartRh = NAN;
+  uint8_t  dryStrikes = 0;
+  bool     reservoirLow = false;
+  float    lastRise = NAN;
 };
 
 extern State st;
@@ -89,6 +96,40 @@ static volatile uint32_t tachPulses = 0;
 
 static void IRAM_ATTR tachISR() { tachPulses++; }
 
+// Three-sample median. One bad reading from the SHT31 should not be able to
+// trigger a burst or trip the emergency cutoff.
+inline float _median3(const float* v) {
+  float a = v[0], b = v[1], c = v[2];
+  if (a > b) { float t = a; a = b; b = t; }
+  if (b > c) { float t = b; b = c; c = t; }
+  if (a > b) { float t = a; a = b; b = t; }
+  return b;
+}
+inline float _tBuf[3], _hBuf[3];
+inline uint8_t _bufN = 0, _bufI = 0;
+
+// The hourly fog cap is worthless if a reboot loop hands out a fresh budget
+// every time, so it is kept in flash.
+inline uint32_t _lastCreditSave = 0;
+
+inline void saveCredit() {
+  Preferences p;
+  if (!p.begin("chamber", false)) return;
+  p.putFloat("credit", st.fogCredit);
+  p.end();
+  _lastCreditSave = millis();
+}
+
+inline float loadCredit(float dflt) {
+  Preferences p;
+  if (!p.begin("chamber", true)) return dflt;
+  float v = p.getFloat("credit", dflt);
+  p.end();
+  if (isnan(v) || v < 0) v = 0;
+  if (v > dflt) v = dflt;
+  return v;
+}
+
 inline void begin() {
   Wire.begin(PIN_SDA, PIN_SCL);
   Wire.setClock(50000);
@@ -102,7 +143,7 @@ inline void begin() {
   pinMode(PIN_FAN_TACH, INPUT_PULLUP);
   attachInterrupt(digitalPinToInterrupt(PIN_FAN_TACH), tachISR, RISING);
 
-  st.fogCredit = cfg.fogBudgetS;
+  st.fogCredit = loadCredit(cfg.fogBudgetS);
 }
 
 inline void _applyFan(uint8_t pct) {
@@ -122,8 +163,15 @@ inline void _readSensor() {
   float h = sht.readHumidity();
   if (isnan(t) || isnan(h)) return;
 
-  st.temp = t;
-  st.rh = h;
+  _tBuf[_bufI] = t;
+  _hBuf[_bufI] = h;
+  _bufI = (_bufI + 1) % 3;
+  if (_bufN < 3) _bufN++;
+
+  if (_bufN < 3) { st.temp = t; st.rh = h; }
+  else { st.temp = _median3(_tBuf); st.rh = _median3(_hBuf); }
+  t = st.temp;
+  h = st.rh;
 
   // Magnus. Any surface colder than this is condensing water.
   const float a = 17.62f, b = 243.12f;
@@ -173,6 +221,7 @@ inline void tick() {
     if (((cfg.autoMode && below) || st.forceBurst) && funded) {
       s = FOG_BURST;
       st.fogTimer = 0;
+      st.burstStartRh = st.rh;
       Serial.printf("[fog] burst at %.1f%%\n", st.rh);
     }
     st.forceBurst = false;
@@ -186,7 +235,28 @@ inline void tick() {
     }
   } else {
     st.fogTimer++;
-    if (st.fogTimer >= cfg.fogSettleS) { s = FOG_IDLE; st.fogTimer = 0; }
+    if (st.fogTimer >= cfg.fogSettleS) {
+      s = FOG_IDLE;
+      st.fogTimer = 0;
+
+      // Did that burst actually do anything? Only a fair question when the
+      // chamber had room to rise and was not already capped by a cold
+      // surface - otherwise a flat result says nothing about the reservoir.
+      if (!isnan(st.burstStartRh) && !st.atCeiling &&
+          st.burstStartRh < cfg.targetRh) {
+        st.lastRise = st.rh - st.burstStartRh;
+        if (st.lastRise < 0.3f) {
+          if (st.dryStrikes < 200) st.dryStrikes++;
+        } else {
+          st.dryStrikes = 0;
+        }
+        bool low = st.dryStrikes >= 3;
+        if (low && !st.reservoirLow)
+          Serial.println("[fog] three bursts with no effect - check water");
+        st.reservoirLow = low;
+      }
+      st.burstStartRh = NAN;
+    }
   }
 
   if (rhOk && st.rh >= cfg.emergencyRh && s == FOG_BURST) {
@@ -197,8 +267,14 @@ inline void tick() {
   st.fogState = s;
 
   bool wantFog = (s == FOG_BURST);
-  if (wantFog) st.fogCredit = max(0.0f, st.fogCredit - 1.0f);
-  else st.fogCredit = min(budget, st.fogCredit + refill);
+  if (wantFog) {
+    st.fogCredit = max(0.0f, st.fogCredit - 1.0f);
+  } else {
+    st.fogCredit = min(budget, st.fogCredit + refill);
+  }
+
+  // Written after spending, rate limited so flash is not hammered.
+  if (millis() - _lastCreditSave > 30000) saveCredit();
 
   fog::set(wantFog);
   fog::tick();
@@ -280,19 +356,19 @@ inline void tick() {
 }
 
 inline const char* statusText() {
-  if (st.updating)                 return "Installing firmware";
-  if (st.sensorFault)              return "Sensor problem, fogger stopped";
-  if (cfg.foggerMode == FOG_NONE)  return "No fogger output set up yet";
-  if (!cfg.autoMode)               return "Manual, you are in control";
-  if (st.fogState == FOG_BURST)    return "Fogging";
-  if (st.fanTestS > 0)             return "Testing the fan";
-  if (st.purgeActive)              return "Too humid, drying down";
-  if (st.faeActive)                return "Fresh air cycle";
-  if (st.fogState == FOG_SETTLE)   return "Fog settling";
-  if (st.fogCredit < cfg.fogBurstS) return "Hourly fog limit reached";
-  if (isnan(st.rh))                return "Waiting for the sensor";
+  if (st.updating)                  return "Updating";
+  if (st.sensorFault)               return "Sensor fault";
+  if (cfg.foggerMode == FOG_NONE)   return "No fogger set";
+  if (!cfg.autoMode)                return "Manual";
+  if (st.fogState == FOG_BURST)     return "Fogging";
+  if (st.fanTestS > 0)              return "Fan test";
+  if (st.purgeActive)               return "Drying down";
+  if (st.faeActive)                 return "Fresh air";
+  if (st.fogState == FOG_SETTLE)    return "Settling";
+  if (st.fogCredit < cfg.fogBurstS) return "Fog limit reached";
+  if (isnan(st.rh))                 return "No sensor";
   if (st.rh < cfg.targetRh - cfg.deadband) return "Below target";
-  return "Holding at target";
+  return "On target";
 }
 
 } // namespace ctrl

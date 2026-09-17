@@ -8,7 +8,11 @@
 
 // Bump this on every release. Shown in the dashboard so people can tell
 // whether they are running the latest build.
-#define FW_VERSION "1.0.0"
+#define FW_VERSION "1.1.0"
+
+// Reachable at http://<this>.local, and how the board names itself to your
+// router. Letters, digits and hyphens only.
+#define HOST_NAME "mushroom"
 
 
 // ---- Pins (change these if your wiring differs) ----------------------------
@@ -73,6 +77,10 @@ struct Config {
   String mqttPass    = "";
   bool   haDiscovery = true;
 
+  // Clock. POSIX timezone string, used only to label the chart with real
+  // times. Default is US Central.
+  String tz = "CST6CDT,M3.2.0,M11.1.0";
+
   // Runtime
   bool autoMode = true;
 };
@@ -105,6 +113,7 @@ inline void configToJson(JsonObject o) {
   o["mqttPort"] = cfg.mqttPort;
   o["mqttUser"] = cfg.mqttUser;
   o["haDiscovery"] = cfg.haDiscovery;
+  o["tz"] = cfg.tz;
   o["autoMode"] = cfg.autoMode;
   // mqttPass deliberately never sent to the browser
 }
@@ -145,6 +154,7 @@ inline void configFromJson(JsonObjectConst o) {
   F_STR(mqttHost, cfg.mqttHost)
   F_STR(mqttUser, cfg.mqttUser)
   F_STR(mqttPass, cfg.mqttPass)
+  F_STR(tz, cfg.tz)
 
   // Max must stay above target or the two fight each other.
   if (cfg.maxRh <= cfg.targetRh) cfg.maxRh = min(100.0f, cfg.targetRh + 2.0f);

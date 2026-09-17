@@ -36,7 +36,7 @@ pio device monitor
 ```
 
 On first boot the board makes a WiFi network called **Chamber-Setup**. Join it,
-pick your network, and the board reboots onto it. Then open `http://chamber.local`
+pick your network, and the board reboots onto it. Then open `http://mushroom.local`
 or the address printed on the serial monitor.
 
 No credentials live in this repo, so it is safe to publish or share.

@@ -1,7 +1,7 @@
 // =============================================================================
 //  web_ui.h - the dashboard, embedded in flash.
-//  Kept as one string so there is no filesystem upload step to get wrong.
-//  Edit freely; it is plain HTML/CSS/JS and needs no build tooling.
+//  One file, no build step, no filesystem upload. Plain HTML/CSS/JS.
+//  Narrow screens stack. Wide screens lay out as a panel.
 // =============================================================================
 #pragma once
 #include <Arduino.h>
@@ -15,101 +15,142 @@ const char INDEX_HTML[] PROGMEM = R"HTMLDOC(<!DOCTYPE html>
 <title>Mushroom Chamber</title>
 <style>
 :root{
-  --ink:#0d1512; --panel:#141f1b; --panel2:#1a2723; --line:#223029;
-  --text:#e6ebe4; --muted:#7d9086; --fog:#9fd8c8; --warm:#e0a45c;
-  --alert:#e0705c;
-  --r:14px;
+  --ink:#0d1512; --panel:#141f1b; --raise:#1a2723; --line:#223029;
+  --text:#e6ebe4; --dim:#7d9086; --fog:#9fd8c8; --warm:#e0a45c;
+  --bad:#e0705c; --r:14px;
 }
 *{box-sizing:border-box}
 html,body{margin:0;padding:0}
 body{
   background:var(--ink); color:var(--text);
   font-family:ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
-  font-size:16px; line-height:1.5;
-  padding:20px 16px 48px; max-width:760px; margin:0 auto;
+  font-size:16px; line-height:1.45;
+  padding:18px 14px 44px; margin:0 auto; max-width:760px;
   font-variant-numeric:tabular-nums;
 }
-h1{font-size:19px;font-weight:600;margin:0;letter-spacing:-.01em}
-h2{font-size:14px;font-weight:600;margin:0 0 12px;color:var(--muted)}
+h1{font-size:18px;font-weight:600;margin:0;letter-spacing:-.01em}
+h2{font-size:12px;font-weight:600;margin:0 0 10px;color:var(--dim);
+  letter-spacing:.02em}
 header{display:flex;align-items:center;justify-content:space-between;
-  gap:16px;margin-bottom:22px}
+  gap:14px;margin-bottom:16px}
+.ver{font-size:12px;color:var(--dim);margin-left:8px;font-weight:400}
 .panel{background:var(--panel);border:1px solid var(--line);
-  border-radius:var(--r);padding:18px;margin-bottom:14px}
+  border-radius:var(--r);padding:16px;margin-bottom:12px}
 
-/* ---- hero: the chamber itself ---- */
-.hero{display:flex;gap:22px;align-items:stretch}
-.gauge{flex:0 0 96px}
-.gauge svg{display:block;width:96px;height:210px}
+/* ---------- hero ---------- */
+.hero{display:flex;gap:18px;align-items:stretch}
+.gauge{flex:0 0 84px}
+.gauge svg{display:block;width:84px;height:200px}
 .readout{flex:1;min-width:0;display:flex;flex-direction:column}
-.rhnum{font-size:52px;font-weight:600;line-height:1;letter-spacing:-.03em}
-.rhnum span{font-size:22px;font-weight:400;color:var(--muted);margin-left:3px}
-.status{margin-top:10px;font-size:15px;color:var(--fog)}
-.status.warn{color:var(--warm)} .status.bad{color:var(--alert)}
-.stats{display:flex;gap:20px;margin-top:auto;padding-top:16px;flex-wrap:wrap}
-.stat b{display:block;font-size:17px;font-weight:600}
-.stat i{font-style:normal;font-size:12px;color:var(--muted)}
+.rhnum{font-size:50px;font-weight:600;line-height:1;letter-spacing:-.03em}
+.rhnum span{font-size:20px;font-weight:400;color:var(--dim);margin-left:2px}
+.state{display:flex;align-items:center;gap:8px;margin-top:8px;font-size:15px}
+.dot{width:9px;height:9px;border-radius:50%;background:var(--fog);flex:0 0 auto}
+.state.warn .dot{background:var(--warm)} .state.warn{color:var(--warm)}
+.state.bad .dot{background:var(--bad)} .state.bad{color:var(--bad)}
+.state.live .dot{animation:pulse 1.6s ease-in-out infinite}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.25}}
 
-/* ---- controls ---- */
-.row{display:flex;align-items:center;justify-content:space-between;
-  gap:12px;padding:11px 0;border-top:1px solid var(--line)}
+/* ---------- stat tiles ---------- */
+.tiles{display:grid;grid-template-columns:repeat(2,1fr);gap:1px;
+  background:var(--line);border:1px solid var(--line);border-radius:12px;
+  overflow:hidden;margin-top:auto}
+.tile{background:var(--panel);padding:9px 11px}
+.tile b{display:block;font-size:16px;font-weight:600;line-height:1.2}
+.tile i{font-style:normal;font-size:11px;color:var(--dim)}
+
+/* ---------- rows ---------- */
+.row{display:flex;align-items:center;gap:10px;flex-wrap:wrap;
+  padding:10px 0;border-top:1px solid var(--line)}
 .row:first-of-type{border-top:0}
-.row label{flex:1;min-width:0}
-.row .hint{display:block;font-size:12px;color:var(--muted);margin-top:1px}
+.lbl{flex:1;min-width:120px;font-size:15px}
+.ctl{display:flex;align-items:center;gap:7px}
+.unit{font-size:13px;color:var(--dim);min-width:26px}
 input[type=number],input[type=text],select{
-  background:var(--panel2);color:var(--text);border:1px solid var(--line);
-  border-radius:9px;padding:8px 10px;font:inherit;font-size:15px;width:96px;
+  background:var(--raise);color:var(--text);border:1px solid var(--line);
+  border-radius:9px;padding:8px 10px;font:inherit;font-size:15px;width:84px;
   text-align:right}
-input[type=text],select{width:190px;text-align:left}
-input:focus-visible,select:focus-visible,button:focus-visible,
-.sw:focus-visible{outline:2px solid var(--fog);outline-offset:2px}
-.wide{width:100%}
-button{background:var(--panel2);color:var(--text);border:1px solid var(--line);
-  border-radius:10px;padding:10px 15px;font:inherit;font-size:14px;cursor:pointer}
+input[type=text],select{width:200px;text-align:left}
+input:focus-visible,select:focus-visible,button:focus-visible{
+  outline:2px solid var(--fog);outline-offset:2px}
+button{background:var(--raise);color:var(--text);border:1px solid var(--line);
+  border-radius:10px;padding:9px 14px;font:inherit;font-size:14px;cursor:pointer}
 button:hover{border-color:var(--fog)}
-button:disabled{opacity:.45;cursor:default}
-.btns{display:flex;gap:10px;flex-wrap:wrap}
 
-/* ---- switch ---- */
-.sw{position:relative;width:50px;height:29px;border-radius:15px;
-  background:var(--panel2);border:1px solid var(--line);cursor:pointer;
+/* ---------- help ---------- */
+.help{width:19px;height:19px;padding:0;border-radius:50%;font-size:12px;
+  line-height:1;color:var(--dim);margin-left:6px;vertical-align:1px}
+.help[aria-expanded=true]{background:var(--fog);color:var(--ink);
+  border-color:var(--fog)}
+.helptext{flex-basis:100%;font-size:13px;color:var(--dim);margin:4px 0 0;
+  padding:9px 11px;background:var(--raise);border-radius:9px}
+
+/* ---------- switch ---------- */
+.sw{position:relative;width:48px;height:28px;border-radius:14px;
+  background:var(--raise);border:1px solid var(--line);cursor:pointer;
   flex:0 0 auto;padding:0}
-.sw::after{content:"";position:absolute;top:3px;left:3px;width:21px;height:21px;
-  border-radius:50%;background:var(--muted);transition:transform .16s,background .16s}
+.sw::after{content:"";position:absolute;top:3px;left:3px;width:20px;height:20px;
+  border-radius:50%;background:var(--dim);transition:transform .16s,background .16s}
 .sw[aria-checked=true]{background:#20403a;border-color:var(--fog)}
-.sw[aria-checked=true]::after{transform:translateX(21px);background:var(--fog)}
+.sw[aria-checked=true]::after{transform:translateX(20px);background:var(--fog)}
 
-/* ---- chart ---- */
-.chart{width:100%;height:132px;display:block}
-.chartfoot{display:flex;justify-content:space-between;font-size:12px;
-  color:var(--muted);margin-top:6px}
+/* ---------- chart ---------- */
+.chart{width:100%;height:120px;display:block}
+.chartfoot{display:flex;justify-content:space-between;font-size:11px;
+  color:var(--dim);margin-top:4px}
 
-details{margin-bottom:14px}
-summary{cursor:pointer;padding:14px 18px;background:var(--panel);
+/* ---------- sections ---------- */
+details{margin-bottom:12px}
+summary{cursor:pointer;padding:13px 16px;background:var(--panel);
   border:1px solid var(--line);border-radius:var(--r);font-size:14px;
-  color:var(--muted);list-style:none}
+  color:var(--dim);list-style:none}
 summary::-webkit-details-marker{display:none}
 summary::before{content:"+ ";font-weight:600}
 details[open] summary{border-radius:var(--r) var(--r) 0 0;color:var(--text)}
 details[open] summary::before{content:"\2212 "}
 details .panel{border-radius:0 0 var(--r) var(--r);border-top:0;margin:0}
-.note{font-size:13px;color:var(--muted);margin:14px 0 0}
+
+.alert{display:none;align-items:flex-start;gap:10px;padding:12px 14px;
+  border-radius:var(--r);margin-bottom:12px;font-size:14px;
+  border:1px solid var(--warm);background:#241d12;color:var(--warm)}
+.alert.on{display:flex}
+.alert.bad{border-color:var(--bad);background:#241513;color:var(--bad)}
+.alert b{display:block;font-weight:600;margin-bottom:1px}
+.alert span{color:var(--dim);font-weight:400}
+.note{font-size:13px;color:var(--dim);margin:12px 0 0}
 .hide{display:none}
-.drop{border:1.5px dashed var(--line);border-radius:12px;padding:26px 16px;
-  text-align:center;color:var(--muted);font-size:14px;cursor:pointer;
-  margin-top:4px}
+.btns{display:flex;gap:9px;flex-wrap:wrap}
+.drop{border:1.5px dashed var(--line);border-radius:12px;padding:22px 14px;
+  text-align:center;color:var(--dim);font-size:14px;cursor:pointer;margin-top:4px}
 .drop:hover,.drop.over{border-color:var(--fog);color:var(--text)}
-.prog{height:8px;background:var(--panel2);border-radius:4px;margin-top:14px;
+.prog{height:7px;background:var(--raise);border-radius:4px;margin-top:12px;
   overflow:hidden}
 .prog i{display:block;height:100%;width:0;background:var(--fog);
   transition:width .15s}
-#toast{position:fixed;left:50%;bottom:22px;transform:translateX(-50%);
-  background:var(--panel2);border:1px solid var(--fog);color:var(--text);
-  padding:9px 16px;border-radius:10px;font-size:14px;opacity:0;
-  transition:opacity .2s;pointer-events:none}
+#toast{position:fixed;left:50%;bottom:20px;transform:translateX(-50%);
+  background:var(--raise);border:1px solid var(--fog);padding:8px 15px;
+  border-radius:10px;font-size:14px;opacity:0;transition:opacity .2s;
+  pointer-events:none}
 #toast.on{opacity:1}
-@media (max-width:430px){
-  .hero{gap:16px}.gauge,.gauge svg{flex-basis:76px;width:76px}
-  .rhnum{font-size:44px}
+
+/* ---------- desktop ---------- */
+@media (min-width:900px){
+  body{max-width:1120px;padding:26px 24px 56px}
+  .gauge,.gauge svg{flex-basis:104px;width:104px;height:250px}
+  .rhnum{font-size:62px}
+  .tiles{grid-template-columns:repeat(3,1fr)}
+  .top{display:grid;grid-template-columns:1.15fr 1fr;gap:12px;
+    align-items:start}
+  .top>*{margin-bottom:0}
+  .grid2{display:grid;grid-template-columns:1fr 1fr;gap:12px;
+    align-items:start}
+  .grid2>*{margin-bottom:0}
+  .chart{height:170px}
+  input[type=text],select{width:230px}
+}
+@media (max-width:420px){
+  .gauge,.gauge svg{flex-basis:70px;width:70px}
+  .rhnum{font-size:42px}
 }
 @media (prefers-reduced-motion:reduce){*{transition:none!important;
   animation:none!important}}
@@ -118,234 +159,312 @@ details .panel{border-radius:0 0 var(--r) var(--r);border-top:0;margin:0}
 <body>
 
 <header>
-  <h1>Mushroom Chamber</h1>
-  <div style="display:flex;align-items:center;gap:10px">
-    <span id="modeLbl" style="font-size:14px;color:var(--muted)">Automatic</span>
+  <h1>Mushroom Chamber<span class="ver" id="fwver"></span></h1>
+  <div style="display:flex;align-items:center;gap:9px">
+    <span id="modeLbl" style="font-size:14px;color:var(--dim)">Auto</span>
     <button class="sw" id="autoSw" role="switch" aria-checked="true"
             aria-label="Automatic control"></button>
   </div>
 </header>
 
-<div class="panel">
-  <div class="hero">
-    <div class="gauge">
-      <svg viewBox="0 0 96 210" aria-hidden="true">
-        <defs>
-          <clipPath id="box"><rect x="9" y="16" width="78" height="180" rx="8"/></clipPath>
-        </defs>
-        <rect x="9" y="16" width="78" height="180" rx="8" fill="#101a17"/>
-        <g clip-path="url(#box)">
-          <rect id="fill" x="9" y="196" width="78" height="0" fill="#9fd8c8"
-                opacity=".22"/>
-          <rect id="fillTop" x="9" y="196" width="78" height="2" fill="#9fd8c8"/>
-        </g>
-        <line id="tgtLine" x1="9" y1="100" x2="87" y2="100" stroke="#e6ebe4"
-              stroke-width="1.5" stroke-dasharray="4 3"/>
-        <line id="maxLine" x1="9" y1="60" x2="87" y2="60" stroke="#e0a45c"
-              stroke-width="1.5" stroke-dasharray="2 3"/>
-        <rect x="9" y="16" width="78" height="180" rx="8" fill="none"
-              stroke="#223029" stroke-width="1.5"/>
-      </svg>
-    </div>
-    <div class="readout">
-      <div class="rhnum" id="rh">--<span>%</span></div>
-      <div class="status" id="status">Connecting</div>
-      <div class="stats">
-        <div class="stat"><b id="temp">--</b><i>Temperature</i></div>
-        <div class="stat"><b id="dew">--</b><i>Dew point</i></div>
-        <div class="stat"><b id="vpd">--</b><i>VPD</i></div>
-        <div class="stat"><b id="fan">--</b><i>Fan</i></div>
+<div class="alert" id="alert">
+  <span aria-hidden="true">&#9888;</span>
+  <div><b id="alertTitle"></b><span id="alertBody"></span></div>
+</div>
+
+<div class="top">
+  <div class="panel">
+    <div class="hero">
+      <div class="gauge">
+        <svg viewBox="0 0 84 200" aria-hidden="true">
+          <defs><clipPath id="box">
+            <rect x="8" y="14" width="68" height="172" rx="8"/>
+          </clipPath></defs>
+          <rect x="8" y="14" width="68" height="172" rx="8" fill="#101a17"/>
+          <g clip-path="url(#box)">
+            <rect id="fill" x="8" y="186" width="68" height="0"
+                  fill="#9fd8c8" opacity=".22"/>
+            <rect id="fillTop" x="8" y="186" width="68" height="2"
+                  fill="#9fd8c8"/>
+          </g>
+          <line id="tgtLine" x1="8" y1="100" x2="76" y2="100" stroke="#e6ebe4"
+                stroke-width="1.5" stroke-dasharray="4 3"/>
+          <line id="maxLine" x1="8" y1="60" x2="76" y2="60" stroke="#e0a45c"
+                stroke-width="1.5" stroke-dasharray="2 3"/>
+          <rect x="8" y="14" width="68" height="172" rx="8" fill="none"
+                stroke="#223029" stroke-width="1.5"/>
+        </svg>
+      </div>
+      <div class="readout">
+        <div class="rhnum" id="rh">--<span>%</span></div>
+        <div class="state" id="state"><span class="dot"></span>
+          <span id="status">Connecting</span></div>
+        <div class="tiles">
+          <div class="tile"><b id="temp">--</b><i>Temp</i></div>
+          <div class="tile"><b id="dew">--</b><i>Dew point</i></div>
+          <div class="tile"><b id="vpd">--</b><i>VPD kPa</i></div>
+          <div class="tile"><b id="fan">--</b><i>Fan</i></div>
+          <div class="tile"><b id="rpm">--</b><i>RPM</i></div>
+          <div class="tile"><b id="fogUsed">--</b><i>Fog this hr</i></div>
+        </div>
       </div>
     </div>
   </div>
-</div>
 
-<div class="panel">
-  <div class="row">
-    <label for="targetRh">Target humidity
-      <span class="hint">What the chamber aims to hold.</span></label>
-    <input type="number" id="targetRh" min="40" max="99" step="1">
-  </div>
-  <div class="row">
-    <label for="maxRh">Maximum humidity
-      <span class="hint">Above this for a while, the fan dries it down.
-        Set 100 to switch that off.</span></label>
-    <input type="number" id="maxRh" min="80" max="100" step="1">
-  </div>
-  <div class="row" id="manualFanRow" style="display:none">
-    <label for="manualFan">Fan speed
-      <span class="hint">Yours while Automatic is off.</span></label>
-    <input type="number" id="manualFan" min="0" max="100" step="5">
-  </div>
-</div>
-
-<div class="panel">
-  <h2>Last 24 hours</h2>
-  <svg class="chart" id="chart" viewBox="0 0 700 132" preserveAspectRatio="none"
-       role="img" aria-label="Humidity over the last 24 hours"></svg>
-  <div class="chartfoot"><span id="chartLeft">24h ago</span><span>now</span></div>
-</div>
-
-<div class="panel">
-  <div class="row">
-    <label for="faeIntervalMin">Fresh air every
-      <span class="hint">Minutes between cycles. Set 0 to switch fresh air off.</span></label>
-    <input type="number" id="faeIntervalMin" min="0" max="360" step="5">
-  </div>
-  <div class="row">
-    <label for="faeDurationS">Fresh air for
-      <span class="hint">Seconds. 45 already swaps the air in a small tub
-        several times.</span></label>
-    <input type="number" id="faeDurationS" min="5" max="600" step="5">
-  </div>
-</div>
-
-<details>
-  <summary>Fogging</summary>
   <div class="panel">
+    <h2>HUMIDITY</h2>
     <div class="row">
-      <label for="fogBurstS">Burst length
-        <span class="hint">Seconds. The fogger never runs longer than this at
-          a stretch.</span></label>
-      <input type="number" id="fogBurstS" min="1" max="60" step="1">
+      <div class="lbl">Target</div>
+      <div class="ctl"><input type="number" id="targetRh" min="40" max="99"
+        step="1"><span class="unit">%</span></div>
     </div>
     <div class="row">
-      <label for="fogSettleS">Settle time
-        <span class="hint">Seconds of quiet while fog turns into humidity.
-          Readings are ignored. Raise this if humidity overshoots.</span></label>
-      <input type="number" id="fogSettleS" min="15" max="900" step="15">
+      <div class="lbl">Max
+        <button class="help" aria-expanded="false" aria-label="About Max">?</button>
+      </div>
+      <div class="ctl"><input type="number" id="maxRh" min="80" max="100"
+        step="1"><span class="unit">%</span></div>
+      <p class="helptext hide">Sit above this for 10 minutes and the fan runs
+        full speed until it drops 2% below. Must be higher than Target.
+        Set 100 to turn it off.</p>
     </div>
-    <div class="row">
-      <label for="fogBudgetS">Fog limit per hour
-        <span class="hint">Seconds. A hard cap on how much water can enter the
-          chamber, whatever else goes wrong.</span></label>
-      <input type="number" id="fogBudgetS" min="30" max="1800" step="15">
+    <div class="row" id="manualFanRow" style="display:none">
+      <div class="lbl">Fan</div>
+      <div class="ctl"><input type="number" id="manualFan" min="0" max="100"
+        step="5"><span class="unit">%</span></div>
     </div>
-    <div class="row">
-      <label for="deadband">Humidity deadband
-        <span class="hint">How far below target it may sag before fogging
-          starts.</span></label>
-      <input type="number" id="deadband" min="0.5" max="15" step="0.5">
-    </div>
-    <p class="note">A five second burst already delivers several times the water
-      a ten point humidity rise needs. If humidity will not climb, adding fog
-      makes puddles rather than humidity. Check for leaks and watch the dew
-      point instead.</p>
-  </div>
-</details>
 
-<details>
-  <summary>Fogger wiring</summary>
-  <div class="panel">
+    <h2 style="margin-top:16px">FRESH AIR</h2>
     <div class="row">
-      <label for="foggerMode">How the fogger is switched</label>
-      <select id="foggerMode">
-        <option value="0">Not set up yet</option>
-        <option value="1">Home Assistant, over MQTT</option>
-        <option value="2">Relay or SSR on the board</option>
-        <option value="3">Another device, over HTTP</option>
-      </select>
+      <div class="lbl">Every
+        <button class="help" aria-expanded="false" aria-label="About interval">?</button>
+      </div>
+      <div class="ctl"><input type="number" id="faeIntervalMin" min="0"
+        max="360" step="5"><span class="unit">min</span></div>
+      <p class="helptext hide">Set 0 to turn fresh air off.</p>
     </div>
-    <div id="modeMqtt" class="hide">
-      <p class="note">Publishes a Fogger Request entity. Make one Home
-        Assistant automation that mirrors it onto your plug. Set up the broker
-        under Network below.</p>
+    <div class="row">
+      <div class="lbl">For
+        <button class="help" aria-expanded="false" aria-label="About duration">?</button>
+      </div>
+      <div class="ctl"><input type="number" id="faeDurationS" min="5" max="600"
+        step="5"><span class="unit">sec</span></div>
+      <p class="helptext hide">45 seconds swaps the air in a small tub several
+        times over. Every second costs humidity.</p>
     </div>
-    <div id="modeRelay" class="hide">
+    <div class="row">
+      <div class="lbl">Fan speed</div>
+      <div class="ctl"><input type="number" id="faeFanSpeed" min="1" max="100"
+        step="5"><span class="unit">%</span></div>
+    </div>
+  </div>
+</div>
+
+<div class="panel">
+  <h2>LAST 24 HOURS</h2>
+  <svg class="chart" id="chart" viewBox="0 0 700 170"
+       preserveAspectRatio="none" role="img"
+       aria-label="Humidity over the last 24 hours"></svg>
+  <div class="chartfoot"><span id="chartLeft">24h ago</span><span id="chartRight">now</span></div>
+</div>
+
+<div class="grid2">
+  <details id="secFog">
+    <summary>Fogging</summary>
+    <div class="panel">
       <div class="row">
-        <label for="relayActiveHigh">Relay switches on when the pin is high
-          <span class="hint">Turn off for active-low relay boards.</span></label>
-        <button class="sw" id="relayActiveHigh" role="switch"></button>
+        <div class="lbl">Burst
+          <button class="help" aria-expanded="false" aria-label="About burst">?</button>
+        </div>
+        <div class="ctl"><input type="number" id="fogBurstS" min="1" max="60"
+          step="1"><span class="unit">sec</span></div>
+        <p class="helptext hide">One shot of fog. The fogger never runs longer
+          than this at a stretch. A 50 L tub needs about 0.09 g of water to go
+          from 80% to 90% RH, and a fogger makes roughly 0.08 g per second, so
+          5 seconds is already several times over. Raise in 2 second steps.</p>
       </div>
-      <p class="note">Wired to GPIO33. Mains wiring belongs in a closed,
-        fused enclosure.</p>
+      <div class="row">
+        <div class="lbl">Settle
+          <button class="help" aria-expanded="false" aria-label="About settle">?</button>
+        </div>
+        <div class="ctl"><input type="number" id="fogSettleS" min="15" max="900"
+          step="15"><span class="unit">sec</span></div>
+        <p class="helptext hide">Quiet time after a burst. Readings are ignored
+          while droplets evaporate into actual humidity. Raise this first if
+          humidity overshoots.</p>
+      </div>
+      <div class="row">
+        <div class="lbl">Limit per hour
+          <button class="help" aria-expanded="false" aria-label="About limit">?</button>
+        </div>
+        <div class="ctl"><input type="number" id="fogBudgetS" min="30"
+          max="1800" step="15"><span class="unit">sec</span></div>
+        <p class="helptext hide">Hard cap on total fogger run time per hour,
+          whatever else goes wrong. If you keep hitting it, find the leak
+          rather than raising it.</p>
+      </div>
+      <div class="row">
+        <div class="lbl">Deadband
+          <button class="help" aria-expanded="false" aria-label="About deadband">?</button>
+        </div>
+        <div class="ctl"><input type="number" id="deadband" min="0.5" max="15"
+          step="0.5"><span class="unit">%</span></div>
+        <p class="helptext hide">How far below Target it may drift before
+          fogging starts.</p>
+      </div>
     </div>
-    <div id="modeHttp" class="hide">
-      <div class="row"><label for="httpOnUrl">Turn on URL</label>
-        <input type="text" id="httpOnUrl" placeholder="http://192.168.1.50/switch/fogger/turn_on"></div>
-      <div class="row"><label for="httpOffUrl">Turn off URL</label>
-        <input type="text" id="httpOffUrl" placeholder="http://192.168.1.50/switch/fogger/turn_off"></div>
-    </div>
-  </div>
-</details>
+  </details>
 
-<details>
-  <summary>Network and Home Assistant</summary>
-  <div class="panel">
-    <div class="row">
-      <label for="mqttEnabled">Connect to an MQTT broker
-        <span class="hint">Optional. Adds Home Assistant sensors and enables
-          the MQTT fogger mode.</span></label>
-      <button class="sw" id="mqttEnabled" role="switch"></button>
+  <details id="secWire">
+    <summary>Fogger wiring</summary>
+    <div class="panel">
+      <div class="row">
+        <div class="lbl">Switched by</div>
+        <div class="ctl"><select id="foggerMode">
+          <option value="0">Nothing yet</option>
+          <option value="1">Home Assistant (MQTT)</option>
+          <option value="2">Relay on GPIO33</option>
+          <option value="3">Another device (HTTP)</option>
+        </select></div>
+      </div>
+      <div id="modeMqtt" class="hide">
+        <p class="note">Publishes a Fogger Request entity. One Home Assistant
+          automation mirrors it onto your plug. Set the broker up under
+          Network below.</p>
+      </div>
+      <div id="modeRelay" class="hide">
+        <div class="row">
+          <div class="lbl">Active high
+            <button class="help" aria-expanded="false" aria-label="About polarity">?</button>
+          </div>
+          <button class="sw" id="relayActiveHigh" role="switch"
+            aria-label="Relay active high"></button>
+          <p class="helptext hide">On for most relay boards. Turn off for
+            active-low boards, which switch when the pin goes low.</p>
+        </div>
+        <p class="note">Mains wiring belongs in a closed, fused enclosure.</p>
+      </div>
+      <div id="modeHttp" class="hide">
+        <div class="row"><div class="lbl">On URL</div>
+          <input type="text" id="httpOnUrl"
+            placeholder="http://192.168.1.50/switch/fog/turn_on"></div>
+        <div class="row"><div class="lbl">Off URL</div>
+          <input type="text" id="httpOffUrl"
+            placeholder="http://192.168.1.50/switch/fog/turn_off"></div>
+      </div>
     </div>
-    <div class="row"><label for="mqttHost">Broker address</label>
-      <input type="text" id="mqttHost" placeholder="192.168.1.10"></div>
-    <div class="row"><label for="mqttPort">Port</label>
-      <input type="number" id="mqttPort" min="1" max="65535" step="1"></div>
-    <div class="row"><label for="mqttUser">Username</label>
-      <input type="text" id="mqttUser"></div>
-    <div class="row"><label for="mqttPass">Password
-      <span class="hint">Leave blank to keep the saved one.</span></label>
-      <input type="text" id="mqttPass" placeholder="unchanged"></div>
-    <div class="row">
-      <label for="haDiscovery">Publish Home Assistant sensors</label>
-      <button class="sw" id="haDiscovery" role="switch"></button>
-    </div>
-    <p class="note" id="mqttState">Not connected.</p>
-  </div>
-</details>
+  </details>
 
-<details>
-  <summary>Setup and tools</summary>
-  <div class="panel">
-    <div class="row">
-      <label for="fanMinDuty">Slowest fan speed
-        <span class="hint">Turn Automatic off, lower the fan until it stalls,
-          then put that number plus five here.</span></label>
-      <input type="number" id="fanMinDuty" min="5" max="60" step="1">
+  <details id="secNet">
+    <summary>Network</summary>
+    <div class="panel">
+      <div class="row">
+        <div class="lbl">Use MQTT
+          <button class="help" aria-expanded="false" aria-label="About MQTT">?</button>
+        </div>
+        <button class="sw" id="mqttEnabled" role="switch"
+          aria-label="Use MQTT"></button>
+        <p class="helptext hide">MQTT is a small messaging service that lets
+          the chamber talk to Home Assistant. You need a broker running.
+          In Home Assistant, install the Mosquitto broker add-on, then create
+          a person under Settings, People with login enabled and use those
+          details here. Leave this off and the chamber works exactly the same,
+          just without Home Assistant entities.</p>
+      </div>
+      <div class="row"><div class="lbl">Broker
+          <button class="help" aria-expanded="false" aria-label="About broker">?</button>
+        </div>
+        <input type="text" id="mqttHost" placeholder="192.168.1.10">
+        <p class="helptext hide">The IP of the machine running Home Assistant.
+          Find it under Settings, System, Network.</p>
+      </div>
+      <div class="row"><div class="lbl">Port</div>
+        <div class="ctl"><input type="number" id="mqttPort" min="1" max="65535"
+          step="1"></div></div>
+      <div class="row"><div class="lbl">User</div>
+        <input type="text" id="mqttUser"></div>
+      <div class="row"><div class="lbl">Password</div>
+        <input type="text" id="mqttPass" placeholder="unchanged"></div>
+      <div class="row">
+        <div class="lbl">Publish entities
+          <button class="help" aria-expanded="false" aria-label="About entities">?</button>
+        </div>
+        <button class="sw" id="haDiscovery" role="switch"
+          aria-label="Publish entities"></button>
+        <p class="helptext hide">Creates the sensors in Home Assistant
+          automatically. They show up under Settings, Devices, MQTT. Read
+          only, so Home Assistant cannot change chamber settings.</p>
+      </div>
+      <div class="row"><div class="lbl">Timezone
+          <button class="help" aria-expanded="false" aria-label="About timezone">?</button>
+        </div>
+        <input type="text" id="tz">
+        <p class="helptext hide">Only used to label the chart with real times.
+          POSIX format. US Central is CST6CDT,M3.2.0,M11.1.0 and Eastern is
+          EST5EDT,M3.2.0,M11.1.0. UTC is fine if you do not care.</p>
+      </div>
+      <p class="note" id="mqttState">Not connected.</p>
     </div>
-    <div class="row">
-      <label for="mixDurationS">Stir after fogging
-        <span class="hint">Seconds. Leave at 0 unless you fit a separate
-          internal circulation fan. Stirring with an exhaust fan just vents
-          the chamber.</span></label>
-      <input type="number" id="mixDurationS" min="0" max="120" step="5">
-    </div>
-    <div class="row">
-      <label>Fan reading now<span class="hint" id="rpm">0 RPM</span></label>
-      <button id="btnFan">Spin the fan</button>
-    </div>
-    <div class="row">
-      <label>Single burst<span class="hint">Runs one burst by hand. Still
-        respects the hourly limit.</span></label>
-      <button id="btnFog">Run a test burst</button>
-    </div>
-    <div class="row">
-      <label>Restart the controller<span class="hint" id="uptime"></span></label>
-      <button id="btnReboot">Restart</button>
-    </div>
-  </div>
-</details>
+  </details>
 
-<details>
-  <summary>Firmware update</summary>
-  <div class="panel">
-    <div class="row">
-      <label>Installed version
-        <span class="hint" id="fwver">Checking</span></label>
+  <details id="secSetup">
+    <summary>Setup and tools</summary>
+    <div class="panel">
+      <div class="row">
+        <div class="lbl">Min fan speed
+          <button class="help" aria-expanded="false" aria-label="About min fan">?</button>
+        </div>
+        <div class="ctl"><input type="number" id="fanMinDuty" min="5" max="60"
+          step="1"><span class="unit">%</span></div>
+        <p class="helptext hide">The slowest your fan actually turns. Switch
+          Auto off, lower the fan until it stalls, then enter that number
+          plus five.</p>
+      </div>
+      <div class="row">
+        <div class="lbl">Stir after fog
+          <button class="help" aria-expanded="false" aria-label="About stir">?</button>
+        </div>
+        <div class="ctl"><input type="number" id="mixDurationS" min="0"
+          max="120" step="5"><span class="unit">sec</span></div>
+        <p class="helptext hide">Leave at 0 with one fan. Your fan vents the
+          chamber, so stirring with it just blows the fog out. Only useful if
+          you add a second fan inside that moves no air in or out.</p>
+      </div>
+      <div class="row">
+        <div class="lbl">Fan reason</div>
+        <div class="ctl" id="fanReason" style="color:var(--dim);font-size:14px">
+          --</div>
+      </div>
+      <div class="row">
+        <div class="lbl">Uptime</div>
+        <div class="ctl" id="uptime"
+          style="color:var(--dim);font-size:14px">--</div>
+      </div>
+      <div class="row">
+        <div class="btns">
+          <button id="btnFan">Spin fan</button>
+          <button id="btnFog">Test burst</button>
+          <button id="btnReboot">Restart</button>
+        </div>
+      </div>
     </div>
-    <div class="drop" id="drop" tabindex="0" role="button"
-         aria-label="Choose a firmware file">
-      Drop a firmware file here, or click to choose one
+  </details>
+
+  <details id="secFw">
+    <summary>Firmware</summary>
+    <div class="panel">
+      <div class="drop" id="drop" tabindex="0" role="button"
+           aria-label="Choose a firmware file">
+        Drop a .bin here, or click to choose
+      </div>
+      <input type="file" id="fwfile" accept=".bin" class="hide">
+      <div class="prog hide" id="progWrap"><i id="progBar"></i></div>
+      <p class="note" id="otaNote">Grab chamber-firmware.bin from the releases
+        page. The chamber keeps running on the old firmware while the new one
+        is written, so a failed upload changes nothing. Settings are kept.</p>
     </div>
-    <input type="file" id="fwfile" accept=".bin" class="hide">
-    <div class="prog hide" id="progWrap"><i id="progBar"></i></div>
-    <p class="note" id="otaNote">Download the latest chamber-firmware.bin from
-      the project's releases page, then drop it here. The chamber keeps running
-      on the current firmware while the new one is written, so a failed upload
-      changes nothing. Your settings are kept.</p>
-  </div>
-</details>
+  </details>
+</div>
 
 <div id="toast"></div>
 
@@ -354,14 +473,14 @@ const $ = id => document.getElementById(id);
 let cfg = {}, ready = false;
 
 const NUMS = ["targetRh","maxRh","deadband","fogBurstS","fogSettleS",
-  "fogBudgetS","faeIntervalMin","faeDurationS","fanMinDuty","mixDurationS",
-  "mqttPort"];
-const TEXTS = ["httpOnUrl","httpOffUrl","mqttHost","mqttUser"];
+  "fogBudgetS","faeIntervalMin","faeDurationS","faeFanSpeed","fanMinDuty",
+  "mixDurationS","mqttPort"];
+const TEXTS = ["httpOnUrl","httpOffUrl","mqttHost","mqttUser","tz"];
 const SWS = ["relayActiveHigh","mqttEnabled","haDiscovery"];
 
-function toast(msg){
-  const t = $("toast"); t.textContent = msg; t.classList.add("on");
-  clearTimeout(t._h); t._h = setTimeout(()=>t.classList.remove("on"), 1600);
+function toast(m){
+  const t=$("toast"); t.textContent=m; t.classList.add("on");
+  clearTimeout(t._h); t._h=setTimeout(()=>t.classList.remove("on"),1500);
 }
 
 async function patch(body){
@@ -371,185 +490,164 @@ async function patch(body){
     if(!r.ok) throw 0;
     cfg = await r.json();
     toast("Saved");
-  }catch(e){ toast("Could not save. Check the connection."); }
+  }catch(e){ toast("Could not save"); }
+}
+
+function wireHelp(){
+  document.querySelectorAll(".help").forEach(b=>{
+    b.addEventListener("click",()=>{
+      const t = b.closest(".row").querySelector(".helptext");
+      if(!t) return;
+      const open = t.classList.toggle("hide");
+      b.setAttribute("aria-expanded", String(!open));
+    });
+  });
 }
 
 function wire(){
-  NUMS.forEach(k=>{
-    const el = $(k); if(!el) return;
-    el.addEventListener("change",()=>patch({[k]: parseFloat(el.value)}));
-  });
-  TEXTS.forEach(k=>{
-    const el = $(k); if(!el) return;
-    el.addEventListener("change",()=>patch({[k]: el.value}));
-  });
-  SWS.forEach(k=>{
-    const el = $(k); if(!el) return;
+  NUMS.forEach(k=>{ const el=$(k); if(el)
+    el.addEventListener("change",()=>patch({[k]:parseFloat(el.value)})); });
+  TEXTS.forEach(k=>{ const el=$(k); if(el)
+    el.addEventListener("change",()=>patch({[k]:el.value})); });
+  SWS.forEach(k=>{ const el=$(k); if(el)
     el.addEventListener("click",()=>{
-      const v = el.getAttribute("aria-checked") !== "true";
-      el.setAttribute("aria-checked", v); patch({[k]: v});
-    });
-  });
+      const v = el.getAttribute("aria-checked")!=="true";
+      el.setAttribute("aria-checked",v); patch({[k]:v});
+    }); });
+
   $("mqttPass").addEventListener("change",e=>{
     if(e.target.value){ patch({mqttPass:e.target.value}); e.target.value=""; }
   });
   $("foggerMode").addEventListener("change",e=>{
-    patch({foggerMode: parseInt(e.target.value)}); showMode(e.target.value);
+    patch({foggerMode:parseInt(e.target.value)}); showMode(e.target.value);
   });
   $("autoSw").addEventListener("click",()=>{
-    const v = $("autoSw").getAttribute("aria-checked") !== "true";
-    $("autoSw").setAttribute("aria-checked", v);
-    $("modeLbl").textContent = v ? "Automatic" : "Manual";
-    $("manualFanRow").style.display = v ? "none" : "";
-    patch({autoMode: v});
+    const v = $("autoSw").getAttribute("aria-checked")!=="true";
+    $("autoSw").setAttribute("aria-checked",v);
+    $("modeLbl").textContent = v?"Auto":"Manual";
+    $("manualFanRow").style.display = v?"none":"";
+    patch({autoMode:v});
   });
   $("manualFan").addEventListener("change",e=>{
     fetch("/api/fan?speed="+parseInt(e.target.value),{method:"POST"});
   });
   $("btnFan").addEventListener("click",()=>{
-    fetch("/api/fan-test",{method:"POST"}); toast("Fan running for 15 seconds");
+    fetch("/api/fan-test",{method:"POST"}); toast("Fan running 15s");
   });
   $("btnFog").addEventListener("click",()=>{
     fetch("/api/fog-burst",{method:"POST"}); toast("Burst requested");
   });
   $("btnReboot").addEventListener("click",()=>{
-    if(confirm("Restart the controller?")){
+    if(confirm("Restart the chamber?")){
       fetch("/api/restart",{method:"POST"}); toast("Restarting");
     }
   });
-}
+  wireHelp();
 
-function wireUpdate(){
-  const drop = $("drop"), file = $("fwfile");
-  const wrap = $("progWrap"), bar = $("progBar"), note = $("otaNote");
-
-  drop.addEventListener("click", ()=>file.click());
-  drop.addEventListener("keydown", e=>{
-    if(e.key==="Enter"||e.key===" "){ e.preventDefault(); file.click(); }
-  });
-  file.addEventListener("change", ()=>{ if(file.files[0]) upload(file.files[0]); });
-
-  ["dragenter","dragover"].forEach(ev=>drop.addEventListener(ev,e=>{
-    e.preventDefault(); drop.classList.add("over");
-  }));
-  ["dragleave","drop"].forEach(ev=>drop.addEventListener(ev,e=>{
-    e.preventDefault(); drop.classList.remove("over");
-  }));
-  drop.addEventListener("drop", e=>{
-    const f = e.dataTransfer.files[0];
-    if(f) upload(f);
-  });
-
-  function upload(f){
-    if(!f.name.endsWith(".bin")){
-      note.textContent = "That is not a firmware file. Look for one ending "+
-        "in .bin on the releases page."; return;
-    }
-    wrap.classList.remove("hide");
-    drop.textContent = "Uploading " + f.name;
-    note.textContent = "Do not close this page or unplug the board.";
-
-    const fd = new FormData(); fd.append("update", f);
-    const xhr = new XMLHttpRequest();
-    xhr.open("POST","/api/update");
-    xhr.upload.onprogress = e=>{
-      if(e.lengthComputable) bar.style.width = (e.loaded/e.total*100)+"%";
-    };
-    xhr.onload = ()=>{
-      if(xhr.status === 200){
-        bar.style.width = "100%";
-        drop.textContent = "Installed";
-        note.textContent = "The chamber is restarting. This page will "+
-          "reconnect on its own in about fifteen seconds.";
-        setTimeout(()=>location.reload(), 15000);
-      } else {
-        drop.textContent = "Drop a firmware file here, or click to choose one";
-        note.textContent = "The update did not finish. The chamber is still "+
-          "running the old firmware, so nothing is broken. Try again.";
-        wrap.classList.add("hide"); bar.style.width = "0";
-      }
-    };
-    xhr.onerror = ()=>{
-      drop.textContent = "Drop a firmware file here, or click to choose one";
-      note.textContent = "Lost the connection during upload. The chamber is "+
-        "still on the old firmware. Try again.";
-      wrap.classList.add("hide"); bar.style.width = "0";
-    };
-    xhr.send(fd);
-  }
+  // Wide screens show everything at once; narrow screens stay folded.
+  if(window.innerWidth >= 900)
+    ["secFog","secWire","secNet","secSetup"].forEach(s=>$(s).open = true);
 }
 
 function showMode(m){
-  $("modeMqtt").classList.toggle("hide", m != 1);
-  $("modeRelay").classList.toggle("hide", m != 2);
-  $("modeHttp").classList.toggle("hide", m != 3);
+  $("modeMqtt").classList.toggle("hide", m!=1);
+  $("modeRelay").classList.toggle("hide", m!=2);
+  $("modeHttp").classList.toggle("hide", m!=3);
 }
 
 function fillConfig(c){
-  cfg = c;
-  NUMS.forEach(k=>{ if($(k) && c[k]!==undefined && document.activeElement!==$(k))
-    $(k).value = c[k]; });
-  TEXTS.forEach(k=>{ if($(k) && c[k]!==undefined && document.activeElement!==$(k))
-    $(k).value = c[k]; });
-  SWS.forEach(k=>{ if($(k) && c[k]!==undefined)
-    $(k).setAttribute("aria-checked", !!c[k]); });
-  $("foggerMode").value = c.foggerMode;
-  showMode(c.foggerMode);
-  $("autoSw").setAttribute("aria-checked", !!c.autoMode);
-  $("modeLbl").textContent = c.autoMode ? "Automatic" : "Manual";
-  $("manualFanRow").style.display = c.autoMode ? "none" : "";
-  ready = true;
+  cfg=c;
+  NUMS.forEach(k=>{ if($(k)&&c[k]!==undefined&&document.activeElement!==$(k))
+    $(k).value=c[k]; });
+  TEXTS.forEach(k=>{ if($(k)&&c[k]!==undefined&&document.activeElement!==$(k))
+    $(k).value=c[k]; });
+  SWS.forEach(k=>{ if($(k)&&c[k]!==undefined)
+    $(k).setAttribute("aria-checked",!!c[k]); });
+  $("foggerMode").value=c.foggerMode; showMode(c.foggerMode);
+  $("autoSw").setAttribute("aria-checked",!!c.autoMode);
+  $("modeLbl").textContent = c.autoMode?"Auto":"Manual";
+  $("manualFanRow").style.display = c.autoMode?"none":"";
+  ready=true;
 }
 
-// Gauge spans 60-100% RH, which is the range this box actually lives in.
-const GT=16, GH=180, LO=60, HI=100;
-const yFor = v => GT + GH * (1 - (Math.min(HI,Math.max(LO,v))-LO)/(HI-LO));
+const GT=14, GH=172, LO=60, HI=100;
+const yFor = v => GT + GH*(1-(Math.min(HI,Math.max(LO,v))-LO)/(HI-LO));
+
+const REASONS=["Idle","Manual","Fresh air","Drying down","Held for fog",
+               "Mixing","Test"];
+
+// Most important problem first. Empty means all clear.
+function alertFor(s){
+  if(s.fault) return ["bad","Sensor fault",
+    " No readings from the SHT31. Fogging is stopped. Check the wiring on GPIO21 and 22."];
+  if(s.dry) return ["bad","Check the water",
+    " Three bursts in a row raised humidity by almost nothing. The reservoir is probably empty, or the disc needs cleaning."];
+  if(s.ceiling) return ["","At the humidity ceiling",
+    " Dew point has met air temperature, so this chamber cannot get any wetter. More fog will only pool. Warm the cold spot or drain standing water."];
+  if(/Fog limit/.test(s.status)) return ["","Hourly fog limit reached",
+    " No more fogging until the budget refills. If this keeps happening, look for leaks rather than raising the limit."];
+  if(/No fogger/.test(s.status)) return ["","No fogger configured",
+    " Pick how the fogger is switched under Fogger wiring."];
+  return null;
+}
+
+let epoch = 0, epochAt = 0;
 
 function paint(s){
-  $("rh").innerHTML = (s.rh==null?"--":s.rh.toFixed(1)) + "<span>%</span>";
+  const a = alertFor(s), box = $("alert");
+  if(a){
+    box.className = "alert on " + a[0];
+    $("alertTitle").textContent = a[1];
+    $("alertBody").textContent = a[2];
+  } else box.className = "alert";
+
+  if(s.epoch){ epoch = s.epoch; epochAt = Date.now(); }
+  $("rh").innerHTML = (s.rh==null?"--":s.rh.toFixed(1))+"<span>%</span>";
   $("temp").textContent = s.temp==null?"--":s.temp.toFixed(1)+"\u00B0";
   $("dew").textContent  = s.dew==null?"--":s.dew.toFixed(1)+"\u00B0";
   $("vpd").textContent  = s.vpd==null?"--":s.vpd.toFixed(2);
-  $("fan").textContent  = s.fan + "%";
-  $("rpm").textContent  = s.rpm + " RPM";
-  $("uptime").textContent = "Running " + Math.floor(s.uptime/3600) + "h " +
-    (Math.floor(s.uptime/60)%60) + "m";
-  $("fwver").textContent = "Version " + (s.version || "unknown");
-  $("mqttState").textContent = s.mqtt ? "Connected to the broker."
-                                      : "Not connected.";
+  $("fan").textContent  = s.fan+"%";
+  $("rpm").textContent  = s.rpm;
+  $("fogUsed").textContent = s.fogUsed+"s";
+  $("fanReason").textContent = REASONS[s.fanReason]||"Idle";
+  $("fwver").textContent = s.version?("v"+s.version):"";
+  $("uptime").textContent = Math.floor(s.uptime/3600)+"h "+
+    (Math.floor(s.uptime/60)%60)+"m";
+  $("mqttState").textContent = s.mqtt?"Connected to broker.":"Not connected.";
 
-  const st = $("status");
-  st.textContent = s.status;
-  st.className = "status" + (s.fault||s.ceiling ? " bad"
-                 : /drying|limit|Below/.test(s.status) ? " warn" : "");
-  if(s.ceiling) st.textContent = s.status + " \u00B7 at the humidity ceiling";
+  let cls="state";
+  if(s.fault) cls+=" bad";
+  else if(s.ceiling||/Drying|limit|Below/.test(s.status)) cls+=" warn";
+  if(s.fogState==1||s.fanReason==2||s.fanReason==3) cls+=" live";
+  $("state").className=cls;
+  $("status").textContent = s.ceiling ? s.status+" \u00B7 at ceiling" : s.status;
 
   if(s.rh!=null){
-    const y = yFor(s.rh);
-    $("fill").setAttribute("y", y);
-    $("fill").setAttribute("height", Math.max(0, GT+GH-y));
-    $("fillTop").setAttribute("y", y-1);
+    const y=yFor(s.rh);
+    $("fill").setAttribute("y",y);
+    $("fill").setAttribute("height",Math.max(0,GT+GH-y));
+    $("fillTop").setAttribute("y",y-1);
   }
   if(ready){
-    $("tgtLine").setAttribute("y1", yFor(cfg.targetRh));
-    $("tgtLine").setAttribute("y2", yFor(cfg.targetRh));
-    const showMax = cfg.maxRh < 100;
-    $("maxLine").style.display = showMax ? "" : "none";
-    if(showMax){
-      $("maxLine").setAttribute("y1", yFor(cfg.maxRh));
-      $("maxLine").setAttribute("y2", yFor(cfg.maxRh));
+    $("tgtLine").setAttribute("y1",yFor(cfg.targetRh));
+    $("tgtLine").setAttribute("y2",yFor(cfg.targetRh));
+    const sm = cfg.maxRh<100;
+    $("maxLine").style.display = sm?"":"none";
+    if(sm){
+      $("maxLine").setAttribute("y1",yFor(cfg.maxRh));
+      $("maxLine").setAttribute("y2",yFor(cfg.maxRh));
     }
   }
 }
 
 function chart(vals){
-  const svg = $("chart");
-  if(!vals || vals.length < 2){
-    svg.innerHTML = '<text x="350" y="70" fill="#7d9086" font-size="13" ' +
+  const svg=$("chart");
+  if(!vals||vals.length<2){
+    svg.innerHTML='<text x="350" y="85" fill="#7d9086" font-size="13" '+
       'text-anchor="middle">Collecting readings</text>';
     return;
   }
-  const W=700,H=132,P=6;
+  const W=700,H=170,P=8;
   let lo=Math.min(...vals), hi=Math.max(...vals);
   if(ready){ lo=Math.min(lo,cfg.targetRh); hi=Math.max(hi,cfg.targetRh); }
   const pad=Math.max(2,(hi-lo)*0.15); lo-=pad; hi+=pad;
@@ -561,33 +659,84 @@ function chart(vals){
   if(ready){
     const ty=Y(cfg.targetRh).toFixed(1);
     g+='<line x1="0" y1="'+ty+'" x2="700" y2="'+ty+'" stroke="#e6ebe4" '+
-       'stroke-width="1" stroke-dasharray="4 3" opacity=".45"/>';
+       'stroke-width="1" stroke-dasharray="4 3" opacity=".4"/>';
   }
   g+='<path d="'+d+'" fill="none" stroke="#9fd8c8" stroke-width="2" '+
      'stroke-linejoin="round"/>';
-  g+='<text x="4" y="12" fill="#7d9086" font-size="11">'+hi.toFixed(0)+'%</text>';
-  g+='<text x="4" y="128" fill="#7d9086" font-size="11">'+lo.toFixed(0)+'%</text>';
+  g+='<text x="5" y="13" fill="#7d9086" font-size="11">'+hi.toFixed(0)+'%</text>';
+  g+='<text x="5" y="166" fill="#7d9086" font-size="11">'+lo.toFixed(0)+'%</text>';
   svg.innerHTML=g;
-  $("chartLeft").textContent = vals.length + " min ago";
+
+  if(epoch){
+    const now = epoch + (Date.now()-epochAt)/1000;
+    const t = new Date((now - vals.length*60)*1000);
+    $("chartLeft").textContent = t.toLocaleTimeString([],
+      {hour:"numeric",minute:"2-digit"});
+    $("chartRight").textContent = "now";
+  } else {
+    $("chartLeft").textContent = vals.length<60 ? vals.length+" min ago"
+      : (vals.length/60).toFixed(0)+"h ago";
+  }
+}
+
+function wireUpdate(){
+  const drop=$("drop"), file=$("fwfile"), wrap=$("progWrap"),
+        bar=$("progBar"), note=$("otaNote");
+
+  drop.addEventListener("click",()=>file.click());
+  drop.addEventListener("keydown",e=>{
+    if(e.key==="Enter"||e.key===" "){ e.preventDefault(); file.click(); }
+  });
+  file.addEventListener("change",()=>{ if(file.files[0]) upload(file.files[0]); });
+  ["dragenter","dragover"].forEach(ev=>drop.addEventListener(ev,e=>{
+    e.preventDefault(); drop.classList.add("over"); }));
+  ["dragleave","drop"].forEach(ev=>drop.addEventListener(ev,e=>{
+    e.preventDefault(); drop.classList.remove("over"); }));
+  drop.addEventListener("drop",e=>{
+    const f=e.dataTransfer.files[0]; if(f) upload(f); });
+
+  function upload(f){
+    if(!f.name.endsWith(".bin")){
+      note.textContent="Not a firmware file. Look for one ending in .bin.";
+      return;
+    }
+    wrap.classList.remove("hide");
+    drop.textContent="Uploading "+f.name;
+    note.textContent="Do not close this page or unplug the board.";
+    const fd=new FormData(); fd.append("update",f);
+    const xhr=new XMLHttpRequest();
+    xhr.open("POST","/api/update");
+    xhr.upload.onprogress=e=>{
+      if(e.lengthComputable) bar.style.width=(e.loaded/e.total*100)+"%"; };
+    xhr.onload=()=>{
+      if(xhr.status===200){
+        bar.style.width="100%"; drop.textContent="Installed";
+        note.textContent="Restarting. This page reloads in about 15 seconds.";
+        setTimeout(()=>location.reload(),15000);
+      } else fail("Update did not finish. Still on the old firmware.");
+    };
+    xhr.onerror=()=>fail("Lost connection. Still on the old firmware.");
+    function fail(msg){
+      drop.textContent="Drop a .bin here, or click to choose";
+      note.textContent=msg; wrap.classList.add("hide"); bar.style.width="0";
+    }
+  }
 }
 
 async function tick(){
-  try{
-    const s = await (await fetch("/api/state")).json();
-    paint(s);
-  }catch(e){ $("status").textContent = "Lost connection to the chamber"; }
+  try{ paint(await (await fetch("/api/state")).json()); }
+  catch(e){ $("status").textContent="Lost connection"; }
 }
 
 async function boot(){
-  wire();
-  wireUpdate();
+  wire(); wireUpdate();
   try{ fillConfig(await (await fetch("/api/config")).json()); }catch(e){}
   await tick();
-  try{ chart((await (await fetch("/api/history")).json()).rh); }catch(e){}
-  setInterval(tick, 2000);
-  setInterval(async()=>{
-    try{ chart((await (await fetch("/api/history")).json()).rh); }catch(e){}
-  }, 60000);
+  const drawChart = async()=>{
+    try{ chart((await (await fetch("/api/history")).json()).rh); }catch(e){} };
+  await drawChart();
+  setInterval(tick,2000);
+  setInterval(drawChart,60000);
 }
 boot();
 </script>

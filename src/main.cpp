@@ -10,6 +10,7 @@
 #include <Arduino.h>
 #include <WiFi.h>
 #include <ESPmDNS.h>
+#include <time.h>
 #include <WiFiManager.h>
 #include <ESPAsyncWebServer.h>
 #include <Update.h>
@@ -39,7 +40,7 @@ static void wifiWatch() {
   if (up && !wasUp) {
     Serial.print("[wifi] connected, ip ");
     Serial.println(WiFi.localIP());
-    MDNS.begin("chamber");
+    if (MDNS.begin(HOST_NAME)) MDNS.addService("http", "tcp", 80);
   }
   wasUp = up;
 
@@ -68,6 +69,10 @@ static void sendState(AsyncWebServerRequest* req) {
   d["fault"] = st.sensorFault;
   d["ceiling"] = st.atCeiling;
   d["mqtt"] = ha::mqtt.connected();
+  d["dry"] = st.reservoirLow;
+  if (isnan(st.lastRise)) d["lastRise"] = nullptr; else d["lastRise"] = st.lastRise;
+  time_t now = time(nullptr);
+  d["epoch"] = (now > 1700000000) ? (uint32_t)now : 0;   // 0 = clock not set
   d["uptime"] = millis() / 1000;
   d["heap"] = ESP.getFreeHeap();
   d["version"] = FW_VERSION;
@@ -226,6 +231,7 @@ void setup() {
   ctrl::begin();
 
   WiFi.mode(WIFI_STA);
+  WiFi.setHostname(HOST_NAME);   // must be set before connecting
   WiFi.setSleep(false);
   WiFi.setAutoReconnect(true);
 
@@ -280,8 +286,14 @@ void setup() {
   } else {
     Serial.print("[wifi] ip ");
     Serial.println(WiFi.localIP());
-    if (MDNS.begin("chamber")) Serial.println("[wifi] http://chamber.local");
+    if (MDNS.begin(HOST_NAME)) {
+      MDNS.addService("http", "tcp", 80);
+      Serial.println("[wifi] http://" HOST_NAME ".local");
+    }
   }
+
+  // Only used to put real times on the chart. Harmless if it never syncs.
+  configTzTime(cfg.tz.c_str(), "pool.ntp.org", "time.nist.gov");
 
   ha::begin();
   setupRoutes();

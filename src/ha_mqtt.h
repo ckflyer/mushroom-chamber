@@ -85,6 +85,7 @@ inline void _sendDiscovery() {
   _sensor("status", "Status", nullptr, nullptr, "mdi:information-outline");
   _sensor("fogUsed", "Fog Used This Hour", "s", nullptr, "mdi:spray");
   _binary("ceiling", "At Humidity Ceiling", "problem");
+  _binary("dry", "Reservoir Empty", "problem");
   _binary("fault", "Sensor Fault", "problem");
 
   // The fogger request. This is what an HA automation watches in order to
@@ -120,6 +121,7 @@ inline void _publishState() {
   d["status"] = ctrl::statusText();
   d["fogUsed"] = (int)(cfg.fogBudgetS - st.fogCredit);
   d["ceiling"] = st.atCeiling ? "1" : "0";
+  d["dry"] = st.reservoirLow ? "1" : "0";
   d["fault"] = st.sensorFault ? "1" : "0";
 
   String payload;
