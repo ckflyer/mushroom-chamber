@@ -165,29 +165,47 @@ was. If the upload dies halfway, nothing is broken — try again.
 While an update is being written, the fogger is forced off and the controller
 pauses. It resumes automatically after the restart.
 
-## Releasing a new version (maintainers)
+## Publishing an update (maintainers)
 
-`.github/workflows/build.yml` builds the firmware for you on every push. To cut
-a release people can download:
+Set the version on the first line, then paste the whole block into Git Bash.
+It bumps the version the dashboard reports, commits, pushes, replaces the tag,
+and triggers the build.
 
-1. Bump `FW_VERSION` in `src/config.h`
-2. Commit and push
-3. Tag it and push the tag:
-
+```bash
+VER=1.2.0 && MSG="what changed" && \
+cd ~/Desktop/mushroom-chamber && \
+sed -i "s/#define FW_VERSION \".*\"/#define FW_VERSION \"$VER\"/" src/config.h && \
+git add -A && \
+git commit -m "$MSG" && \
+git push && \
+{ git tag -d "v$VER" || true; } && \
+{ git push origin ":refs/tags/v$VER" || true; } && \
+git tag "v$VER" && \
+git push origin "v$VER" && \
+echo "pushed v$VER - watch the Actions tab, then grab the .bin from Releases"
 ```
-git tag v1.1.0
-git push origin v1.1.0
+
+Or the same thing with the script:
+
+```bash
+./release.sh 1.2.0 "what changed"
 ```
 
-GitHub builds it and creates a Release with `chamber-firmware.bin` attached.
-Nothing to build locally.
+**The build must go green before a `.bin` exists.** Open the Actions tab on the
+repository. A red run means a compile error and the release will have only the
+source zip attached. Click into the failed run, open the `build` step, and the
+error is at the bottom.
 
-Untagged pushes still build — the `.bin` shows up under the repository's
-Actions tab for testing.
+Once it is green, the release page has `chamber-firmware.bin`. Download it and
+drop it into the Firmware tab of the chamber dashboard.
+
+Untagged pushes still build — that `.bin` shows up under Actions for testing,
+without creating a release.
 
 ## Layout
 
 ```
+release.sh      cut a release in one command
 src/config.h    pins, settings, saving to flash
 src/fogger.h    the only file that knows how the fogger is switched
 src/control.h   sensors, burst state machine, fan arbitration
