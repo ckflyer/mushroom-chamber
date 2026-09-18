@@ -17,10 +17,7 @@ namespace fog {
 inline bool _state = false;
 inline uint32_t _lastAssert = 0;
 
-inline void begin() {
-  pinMode(PIN_RELAY, OUTPUT);
-  digitalWrite(PIN_RELAY, cfg.relayActiveHigh ? LOW : HIGH);
-}
+inline void begin() {}
 
 inline void _httpCall(const String& url) {
   if (!url.length() || WiFi.status() != WL_CONNECTED) return;
@@ -35,9 +32,6 @@ inline void _httpCall(const String& url) {
 
 inline void _apply(bool on) {
   switch (cfg.foggerMode) {
-    case FOG_RELAY:
-      digitalWrite(PIN_RELAY, (on == cfg.relayActiveHigh) ? HIGH : LOW);
-      break;
     case FOG_HTTP:
       _httpCall(on ? cfg.httpOnUrl : cfg.httpOffUrl);
       break;
@@ -75,7 +69,6 @@ inline void tick() {
 // because we may not know which mode was active when things went wrong.
 inline void allOff() {
   _state = false;
-  digitalWrite(PIN_RELAY, cfg.relayActiveHigh ? LOW : HIGH);
   _httpCall(cfg.httpOffUrl);
   mqttPublishFogger(false);
 }

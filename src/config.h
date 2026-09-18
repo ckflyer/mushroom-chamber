@@ -8,7 +8,7 @@
 
 // Bump this on every release. Shown in the dashboard so people can tell
 // whether they are running the latest build.
-#define FW_VERSION "1.1.2"
+#define FW_VERSION "1.2.0"
 
 // Reachable at http://<this>.local, and how the board names itself to your
 // router. Letters, digits and hyphens only.
@@ -21,16 +21,14 @@
 #define PIN_FAN_PWM    25   // 4-pin fan, blue wire
 #define PIN_FAN_TACH   26   // 4-pin fan, green wire
 #define PIN_FAN_POWER  27   // MOSFET gate, cuts fan power so RPM reaches zero
-#define PIN_RELAY      33   // only used in Relay fogger mode
 
 // ---- How the fogger gets switched ------------------------------------------
 // Chosen in the web UI at runtime, not at compile time, so swapping hardware
 // later is a dropdown rather than a reflash.
 enum FoggerMode : uint8_t {
-  FOG_NONE  = 0,   // nothing wired up yet; controller runs but never fogs
-  FOG_MQTT  = 1,   // publish ON/OFF; a Home Assistant automation drives the plug
-  FOG_RELAY = 2,   // drive PIN_RELAY directly (relay or SSR on the board)
-  FOG_HTTP  = 3,   // GET a URL to switch another device on/off
+  FOG_NONE = 0,   // nothing set up yet; the controller runs but never fogs
+  FOG_MQTT = 1,   // publish ON/OFF; a Home Assistant automation drives the plug
+  FOG_HTTP = 2,   // GET a URL to switch another device on or off
 };
 
 struct Config {
@@ -65,7 +63,6 @@ struct Config {
 
   // Fogger output
   uint8_t foggerMode = FOG_NONE;
-  bool    relayActiveHigh = true;
   String  httpOnUrl  = "";
   String  httpOffUrl = "";
 
@@ -105,7 +102,6 @@ inline void configToJson(JsonObject o) {
   o["purgeFanSpeed"] = cfg.purgeFanSpeed;
   o["sensorFaultS"] = cfg.sensorFaultS;
   o["foggerMode"] = cfg.foggerMode;
-  o["relayActiveHigh"] = cfg.relayActiveHigh;
   o["httpOnUrl"] = cfg.httpOnUrl;
   o["httpOffUrl"] = cfg.httpOffUrl;
   o["mqttEnabled"] = cfg.mqttEnabled;
@@ -143,9 +139,8 @@ inline void configFromJson(JsonObjectConst o) {
   F_NUM(purgeDeadband, cfg.purgeDeadband, 0.5f, 10)
   F_NUM(purgeFanSpeed, cfg.purgeFanSpeed, 1, 100)
   F_NUM(sensorFaultS, cfg.sensorFaultS, 10, 600)
-  F_NUM(foggerMode, cfg.foggerMode, 0, 3)
+  F_NUM(foggerMode, cfg.foggerMode, 0, 2)
   F_NUM(mqttPort, cfg.mqttPort, 1, 65535)
-  F_BOOL(relayActiveHigh, cfg.relayActiveHigh)
   F_BOOL(mqttEnabled, cfg.mqttEnabled)
   F_BOOL(haDiscovery, cfg.haDiscovery)
   F_BOOL(autoMode, cfg.autoMode)
@@ -176,6 +171,54 @@ inline void configSave() {
   p.begin("chamber", false);
   p.putString("cfg", s);
   p.end();
+}
+
+// ---------------------------------------------------------------------------
+// User presets. No built-in species list - people save their own once they
+// find settings that work, which is the only kind of preset worth trusting.
+// Stored as a JSON array: [{"name":"Blue oyster","v":{...}}, ...]
+// ---------------------------------------------------------------------------
+#define PRESET_MAX 12
+
+inline String presetsLoad() {
+  Preferences p;
+  if (!p.begin("chamber", true)) return "[]";
+  String s = p.getString("presets", "[]");
+  p.end();
+  return s.length() ? s : "[]";
+}
+
+inline void presetsStore(const String& json) {
+  Preferences p;
+  if (!p.begin("chamber", false)) return;
+  p.putString("presets", json);
+  p.end();
+}
+
+// Adds or replaces a preset by name, or removes it. Returns the new list.
+inline String presetsApply(const String& name, JsonObjectConst values,
+                           bool remove) {
+  JsonDocument d;
+  deserializeJson(d, presetsLoad());
+  if (!d.is<JsonArray>()) d.to<JsonArray>();
+
+  JsonDocument out;
+  JsonArray arr = out.to<JsonArray>();
+  for (JsonObjectConst it : d.as<JsonArrayConst>()) {
+    if (String(it["name"] | "") == name) continue;   // replaced or removed
+    arr.add(it);
+  }
+  if (!remove && name.length()) {
+    JsonObject o = arr.add<JsonObject>();
+    o["name"] = name;
+    o["v"] = values;
+  }
+  while (arr.size() > PRESET_MAX) arr.remove(0);
+
+  String s;
+  serializeJson(arr, s);
+  presetsStore(s);
+  return s;
 }
 
 inline void configLoad() {

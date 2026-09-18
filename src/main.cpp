@@ -118,6 +118,40 @@ static void setupRoutes() {
   server.on("/api/config", HTTP_GET, sendConfig);
   server.on("/api/history", HTTP_GET, sendHistory);
 
+  server.on("/api/presets", HTTP_GET, [](AsyncWebServerRequest* r) {
+    r->send(200, "application/json", presetsLoad());
+  });
+
+  // Save or delete a named preset. Body: {"name":"...","v":{...}} or
+  // {"name":"...","delete":true}
+  server.on("/api/presets", HTTP_POST,
+    [](AsyncWebServerRequest* r) { /* answered from the body handler */ },
+    NULL,
+    [](AsyncWebServerRequest* r, uint8_t* data, size_t len,
+       size_t index, size_t total) {
+      static String body;
+      if (index == 0) { body = ""; body.reserve(total + 1); }
+      for (size_t i = 0; i < len; i++) body += (char)data[i];
+      if (index + len < total) return;
+
+      JsonDocument d;
+      DeserializationError err = deserializeJson(d, body);
+      body = "";
+      if (err) {
+        r->send(400, "application/json", "{\"ok\":false}");
+        return;
+      }
+      String name = d["name"] | "";
+      name.trim();
+      if (!name.length() || name.length() > 28) {
+        r->send(400, "application/json", "{\"ok\":false}");
+        return;
+      }
+      bool del = d["delete"] | false;
+      String out = presetsApply(name, d["v"].as<JsonObjectConst>(), del);
+      r->send(200, "application/json", out);
+    });
+
   // Settings come in as a JSON body. Parsed by hand rather than with
   // AsyncCallbackJsonWebHandler, whose constructor signature changes between
   // ESPAsyncWebServer releases.

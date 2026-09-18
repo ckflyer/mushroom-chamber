@@ -127,6 +127,25 @@ button:hover{border-color:var(--fog)}
   color:var(--dim);margin-top:4px}
 
 .note{font-size:13px;color:var(--dim);margin:10px 0 0}
+.hint{display:block;font-size:12px;color:var(--dim);margin-top:1px}
+dialog{border:1px solid var(--line);border-radius:var(--r);background:var(--panel);
+  color:var(--text);padding:0;max-width:640px;width:calc(100% - 28px);
+  max-height:84vh;overflow:hidden}
+dialog::backdrop{background:rgba(0,0,0,.65)}
+.dlghead{display:flex;align-items:center;justify-content:space-between;
+  gap:12px;padding:14px var(--pad);border-bottom:1px solid var(--line)}
+.dlghead b{font-size:15px}
+.dlghead button{width:32px;height:32px;padding:0;font-size:17px;line-height:1}
+.dlgbody{padding:var(--pad);overflow-y:auto;max-height:calc(84vh - 58px);
+  font-size:14px}
+.dlgbody p{margin:0 0 12px;color:var(--dim)}
+.dlgbody ol{margin:0 0 14px;padding-left:20px}
+.dlgbody li{margin-bottom:10px;color:var(--dim)}
+.dlgbody li b{color:var(--text);font-weight:600}
+.dlgbody pre{background:var(--ink);border:1px solid var(--line);
+  border-radius:9px;padding:12px;font-size:12px;line-height:1.4;
+  overflow-x:auto;margin:0 0 10px;
+  font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace}
 .hide{display:none}
 .btns{display:flex;gap:9px;flex-wrap:wrap}
 .drop{border:1.5px dashed var(--line);border-radius:12px;padding:24px 14px;
@@ -174,8 +193,6 @@ button:hover{border-color:var(--fog)}
     <button data-view="dash" aria-current="page">Dashboard</button>
     <button data-view="fog">Fogging</button>
     <button data-view="setup">Setup</button>
-    <button data-view="net">Network</button>
-    <button data-view="fw">Firmware</button>
   </div>
   <span id="modeLbl" style="font-size:13px;color:var(--dim)">Auto</span>
   <button class="sw" id="autoSw" role="switch" aria-checked="true"
@@ -188,8 +205,6 @@ button:hover{border-color:var(--fog)}
   <button data-view="dash" aria-current="page">Dashboard</button>
   <button data-view="fog">Fogging</button>
   <button data-view="setup">Setup</button>
-  <button data-view="net">Network</button>
-  <button data-view="fw">Firmware</button>
 </div>
 
 <div class="alert" id="alert">
@@ -243,15 +258,19 @@ button:hover{border-color:var(--fog)}
     <div class="panel">
       <h2>HUMIDITY</h2>
       <div class="row">
-        <div class="lbl">Species
+        <div class="lbl">Preset
           <button class="help" aria-expanded="false" aria-label="About presets">?</button>
         </div>
-        <div class="ctl"><select id="preset">
-          <option value="">Custom</option>
-        </select></div>
-        <p class="helptext hide">Sets target humidity and fresh air timing to
-          a sensible starting point. Tune from there. Changing any of those
-          values by hand switches this back to Custom.</p>
+        <div class="ctl">
+          <select id="preset"><option value="">Custom</option></select>
+          <button id="btnSavePreset" title="Save current settings as a preset">Save as</button>
+          <button id="btnDelPreset" title="Delete this preset">&#215;</button>
+        </div>
+        <p class="helptext hide">Saves target, max, and the three fresh air
+          settings under a name you choose. Nothing is built in, because the
+          right numbers depend on your species, your chamber and your room.
+          Find settings that work, then save them. Changing any of those values
+          by hand switches back to Custom.</p>
       </div>
       <div class="row">
         <div class="lbl">Target</div>
@@ -386,32 +405,25 @@ button:hover{border-color:var(--fog)}
 <section class="view" id="v-setup">
   <div class="two">
     <div class="panel">
-      <h2>FOGGER WIRING</h2>
+      <h2>FOGGER</h2>
       <div class="row">
         <div class="lbl">Switched by</div>
         <div class="ctl"><select id="foggerMode">
           <option value="0">Nothing yet</option>
-          <option value="1">Home Assistant (MQTT)</option>
-          <option value="2">Relay on GPIO33</option>
-          <option value="3">Another device (HTTP)</option>
+          <option value="1">Home Assistant</option>
+          <option value="2">Another device (HTTP)</option>
         </select></div>
       </div>
       <div id="modeMqtt" class="hide">
-        <p class="note">Publishes a Fogger Request entity. One Home Assistant
-          automation mirrors it onto your plug. Set the broker up under
-          Network.</p>
-      </div>
-      <div id="modeRelay" class="hide">
         <div class="row">
-          <div class="lbl">Active high
-            <button class="help" aria-expanded="false" aria-label="About polarity">?</button>
+          <div class="lbl">Fogger plug
+            <span class="hint" id="mqttFogState">Waiting for the broker</span>
           </div>
-          <button class="sw" id="relayActiveHigh" role="switch"
-            aria-label="Relay active high"></button>
-          <p class="helptext hide">On for most relay boards. Turn off for
-            active-low boards, which switch when the pin goes low.</p>
+          <div class="ctl"><button id="btnGuide">Setup guide</button></div>
         </div>
-        <p class="note">Mains wiring belongs in a closed, fused enclosure.</p>
+        <p class="note">The chamber publishes a Fogger Request entity. One
+          Home Assistant automation mirrors it onto your smart plug. The guide
+          walks through all of it, including the automation.</p>
       </div>
       <div id="modeHttp" class="hide">
         <div class="row"><div class="lbl">On URL</div>
@@ -420,7 +432,45 @@ button:hover{border-color:var(--fog)}
         <div class="row"><div class="lbl">Off URL</div>
           <input type="text" id="httpOffUrl"
             placeholder="http://192.168.1.50/switch/fog/turn_off"></div>
+        <p class="note">Any device with a plain URL API works, including
+          another ESP running ESPHome.</p>
       </div>
+
+      <h2 style="margin-top:16px">HOME ASSISTANT</h2>
+      <div class="row">
+        <div class="lbl">Use MQTT
+          <button class="help" aria-expanded="false" aria-label="About MQTT">?</button>
+        </div>
+        <div class="ctl">
+          <button id="btnGuide2">Setup guide</button>
+          <button class="sw" id="mqttEnabled" role="switch"
+            aria-label="Use MQTT"></button>
+        </div>
+        <p class="helptext hide">MQTT is a small messaging service that lets
+          the chamber talk to Home Assistant. Leave it off and the chamber
+          works exactly the same, just without entities. Press Setup guide for
+          the full walkthrough.</p>
+      </div>
+      <div class="row"><div class="lbl">Broker</div>
+        <input type="text" id="mqttHost" placeholder="192.168.1.10"></div>
+      <div class="row"><div class="lbl">Port</div>
+        <div class="ctl"><input type="number" id="mqttPort" min="1" max="65535"
+          step="1"></div></div>
+      <div class="row"><div class="lbl">User</div>
+        <input type="text" id="mqttUser"></div>
+      <div class="row"><div class="lbl">Password</div>
+        <input type="text" id="mqttPass" placeholder="unchanged"></div>
+      <div class="row">
+        <div class="lbl">Publish entities
+          <button class="help" aria-expanded="false" aria-label="About entities">?</button>
+        </div>
+        <button class="sw" id="haDiscovery" role="switch"
+          aria-label="Publish entities"></button>
+        <p class="helptext hide">Creates the sensors in Home Assistant
+          automatically. They appear under Settings, Devices, MQTT. Read only,
+          so Home Assistant cannot change chamber settings.</p>
+      </div>
+      <p class="note" id="mqttState">Not connected.</p>
     </div>
 
     <div class="panel">
@@ -450,66 +500,13 @@ button:hover{border-color:var(--fog)}
         <div class="ctl ro" id="fanReason">--</div>
       </div>
       <div class="row">
-        <div class="lbl">Uptime</div>
-        <div class="ctl ro" id="uptime">--</div>
-      </div>
-      <div class="row">
         <div class="btns">
           <button id="btnFan">Spin fan</button>
           <button id="btnReboot">Restart</button>
         </div>
       </div>
-    </div>
-  </div>
-</section>
 
-<!-- ==================== NETWORK ==================== -->
-<section class="view" id="v-net">
-  <div class="two">
-    <div class="panel">
-      <h2>HOME ASSISTANT</h2>
-      <div class="row">
-        <div class="lbl">Use MQTT
-          <button class="help" aria-expanded="false" aria-label="About MQTT">?</button>
-        </div>
-        <button class="sw" id="mqttEnabled" role="switch"
-          aria-label="Use MQTT"></button>
-        <p class="helptext hide">MQTT is a small messaging service that lets the
-          chamber talk to Home Assistant. You need a broker running. In Home
-          Assistant, install the Mosquitto broker add-on, then create a person
-          under Settings, People with login enabled and use those details here.
-          Leave this off and the chamber works exactly the same, just without
-          Home Assistant entities.</p>
-      </div>
-      <div class="row"><div class="lbl">Broker
-          <button class="help" aria-expanded="false" aria-label="About broker">?</button>
-        </div>
-        <input type="text" id="mqttHost" placeholder="192.168.1.10">
-        <p class="helptext hide">The IP of the machine running Home Assistant.
-          Find it under Settings, System, Network.</p>
-      </div>
-      <div class="row"><div class="lbl">Port</div>
-        <div class="ctl"><input type="number" id="mqttPort" min="1" max="65535"
-          step="1"></div></div>
-      <div class="row"><div class="lbl">User</div>
-        <input type="text" id="mqttUser"></div>
-      <div class="row"><div class="lbl">Password</div>
-        <input type="text" id="mqttPass" placeholder="unchanged"></div>
-      <div class="row">
-        <div class="lbl">Publish entities
-          <button class="help" aria-expanded="false" aria-label="About entities">?</button>
-        </div>
-        <button class="sw" id="haDiscovery" role="switch"
-          aria-label="Publish entities"></button>
-        <p class="helptext hide">Creates the sensors in Home Assistant
-          automatically. They appear under Settings, Devices, MQTT. Read only,
-          so Home Assistant cannot change chamber settings.</p>
-      </div>
-      <p class="note" id="mqttState">Not connected.</p>
-    </div>
-
-    <div class="panel">
-      <h2>CLOCK</h2>
+      <h2 style="margin-top:16px">CLOCK</h2>
       <div class="row">
         <div class="lbl">Timezone</div>
         <div class="ctl"><select id="tz"></select></div>
@@ -518,27 +515,112 @@ button:hover{border-color:var(--fog)}
         <div class="lbl">Chamber time</div>
         <div class="ctl ro" id="clock">--</div>
       </div>
-      <p class="note">Only used to put real times on the chart. The chamber
-        runs fine without it.</p>
+      <div class="row">
+        <div class="lbl">Uptime</div>
+        <div class="ctl ro" id="uptime">--</div>
+      </div>
+
+      <h2 style="margin-top:16px">FIRMWARE</h2>
+      <div class="drop" id="drop" tabindex="0" role="button"
+           aria-label="Choose a firmware file">
+        Drop a .bin here, or click to choose
+      </div>
+      <input type="file" id="fwfile" accept=".bin" class="hide">
+      <div class="prog hide" id="progWrap"><i id="progBar"></i></div>
+      <p class="note" id="otaNote">Grab chamber-firmware.bin from the releases
+        page. The chamber keeps running on the old firmware while the new one
+        is written, so a failed upload changes nothing. Settings are kept.</p>
     </div>
   </div>
 </section>
 
-<!-- ==================== FIRMWARE ==================== -->
-<section class="view" id="v-fw">
-  <div class="panel">
-    <h2>UPDATE</h2>
-    <div class="drop" id="drop" tabindex="0" role="button"
-         aria-label="Choose a firmware file">
-      Drop a .bin here, or click to choose
-    </div>
-    <input type="file" id="fwfile" accept=".bin" class="hide">
-    <div class="prog hide" id="progWrap"><i id="progBar"></i></div>
-    <p class="note" id="otaNote">Grab chamber-firmware.bin from the releases
-      page. The chamber keeps running on the old firmware while the new one is
-      written, so a failed upload changes nothing. Settings are kept.</p>
+<!-- ==================== MQTT GUIDE ==================== -->
+<dialog id="guide">
+  <div class="dlghead">
+    <b>Connecting to Home Assistant</b>
+    <button id="guideClose" aria-label="Close">&#215;</button>
   </div>
-</section>
+  <div class="dlgbody">
+    <p>Home Assistant does not speak MQTT on its own, so this takes a few
+      steps. Once done, the chamber appears as a normal device and can drive
+      a smart plug it cannot reach directly, like a Kasa KP125M.</p>
+
+    <ol>
+      <li><b>Install the broker.</b> In Home Assistant go to Settings,
+        Add-ons, Add-on Store. Search for <b>Mosquitto broker</b>. Install it,
+        press Start, and turn on Start on boot. Skip this if you already run a
+        broker.</li>
+
+      <li><b>Make a login for the chamber.</b> Settings, People, Add person.
+        Call it <b>chamber</b>, turn on Allow person to login, set a password,
+        leave admin off. Mosquitto accepts Home Assistant accounts, so this is
+        the only credential setup needed.</li>
+
+      <li><b>Add the MQTT integration.</b> Settings, Devices &amp; Services.
+        Home Assistant usually spots the broker and offers an MQTT card, so
+        press Configure and accept. If not, Add Integration, search MQTT, and
+        enter your Home Assistant IP with port 1883.</li>
+
+      <li><b>Find your Home Assistant IP.</b> Settings, System, Network. It
+        looks like 192.168.1.10.</li>
+
+      <li><b>Fill in this page.</b> Turn on Use MQTT, put that IP in Broker,
+        leave the port at 1883, and enter the username and password from step
+        2. Within about five seconds the line at the bottom of this section
+        should read Connected to broker.</li>
+
+      <li><b>Check the entities arrived.</b> Settings, Devices &amp; Services,
+        MQTT, Devices. A device called Mushroom Chamber appears on its own,
+        with humidity, temperature, dew point, VPD, status and a Fogger
+        Request entity.</li>
+
+      <li><b>Set Switched by to Home Assistant</b> at the top of this
+        section.</li>
+
+      <li><b>Add the automation.</b> Settings, Automations, create a new one,
+        then use the three dot menu to pick Edit in YAML. Paste this, changing
+        the two entity IDs to match yours. Find them under Developer tools,
+        States by searching for fogger.</li>
+    </ol>
+
+    <pre id="autoYaml">alias: Mushroom fogger
+mode: queued
+max: 10
+max_exceeded: silent
+trigger:
+  - platform: state
+    entity_id: binary_sensor.mushroom_chamber_fogger_request
+  - platform: time_pattern
+    minutes: "/1"
+  - platform: state
+    entity_id: switch.mushroom_fogger
+    to: "on"
+    for: "00:02:00"
+    id: toolong
+action:
+  - choose:
+      - conditions: "{{ trigger.id == 'toolong' }}"
+        sequence:
+          - service: switch.turn_off
+            target: { entity_id: switch.mushroom_fogger }
+      - conditions:
+          - condition: template
+            value_template: >
+              {{ is_state('binary_sensor.mushroom_chamber_fogger_request','on')
+                 != is_state('switch.mushroom_fogger','on') }}
+        sequence:
+          - service: >
+              switch.turn_{{ 'on' if is_state('binary_sensor.mushroom_chamber_fogger_request','on') else 'off' }}
+            target: { entity_id: switch.mushroom_fogger }</pre>
+    <div class="btns"><button id="copyYaml">Copy</button></div>
+
+    <p class="note">The minute trigger re-sends the current state, so a dropped
+      message fixes itself within a minute. The two minute rule switches the
+      plug off if it somehow gets stuck on. If the chamber loses power the
+      entity goes unavailable, which is not on, so the plug switches off
+      too.</p>
+  </div>
+</dialog>
 
 <div id="toast"></div>
 
@@ -550,18 +632,9 @@ const NUMS = ["targetRh","maxRh","deadband","fogBurstS","fogSettleS",
   "fogBudgetS","faeIntervalMin","faeDurationS","faeFanSpeed","fanMinDuty",
   "mixDurationS","mqttPort"];
 const TEXTS = ["httpOnUrl","httpOffUrl","mqttHost","mqttUser"];
-const SWS = ["relayActiveHigh","mqttEnabled","haDiscovery"];
-
-// Starting points, not gospel. Every strain and every chamber differs.
-const PRESETS = {
-  "Oyster":       {targetRh:88, maxRh:96, faeIntervalMin:30, faeDurationS:60, faeFanSpeed:70},
-  "King oyster":  {targetRh:88, maxRh:96, faeIntervalMin:30, faeDurationS:60, faeFanSpeed:70},
-  "Lion's mane":  {targetRh:92, maxRh:98, faeIntervalMin:60, faeDurationS:45, faeFanSpeed:55},
-  "Shiitake":     {targetRh:85, maxRh:94, faeIntervalMin:60, faeDurationS:45, faeFanSpeed:60},
-  "Wine cap":     {targetRh:90, maxRh:97, faeIntervalMin:90, faeDurationS:40, faeFanSpeed:55},
-  "Button":       {targetRh:88, maxRh:96, faeIntervalMin:90, faeDurationS:40, faeFanSpeed:50},
-  "Reishi":       {targetRh:90, maxRh:97, faeIntervalMin:45, faeDurationS:50, faeFanSpeed:60}
-};
+const SWS = ["mqttEnabled","haDiscovery"];
+// What a preset captures.
+const PKEYS = ["targetRh","maxRh","faeIntervalMin","faeDurationS","faeFanSpeed"];
 
 // Plain names instead of POSIX strings nobody can read.
 const ZONES = [
@@ -631,26 +704,83 @@ function wireHelp(){
   });
 }
 
-/* ---------- presets ---------- */
-function buildPresets(){
-  const sel = $("preset");
-  Object.keys(PRESETS).forEach(n=>{
-    const o=document.createElement("option"); o.value=n; o.textContent=n;
-    sel.appendChild(o);
+/* ---------- presets, saved by the user ---------- */
+let presets = [];
+
+function renderPresets(){
+  const sel=$("preset"), keep=sel.value;
+  sel.innerHTML='<option value="">Custom</option>';
+  presets.forEach(p=>{
+    const o=document.createElement("option");
+    o.value=p.name; o.textContent=p.name; sel.appendChild(o);
   });
-  sel.addEventListener("change",()=>{
-    const p = PRESETS[sel.value];
-    if(!p) return;
-    patch(p).then(()=>{ fillConfig(cfg); sel.value = matchPreset(); });
-  });
+  sel.value = matchPreset() || (presets.some(p=>p.name===keep)?keep:"");
+  $("btnDelPreset").disabled = !sel.value;
 }
 
 // A preset is only "selected" while every one of its values still matches.
 function matchPreset(){
-  for(const [name,p] of Object.entries(PRESETS)){
-    if(Object.keys(p).every(k=>Math.abs(cfg[k]-p[k])<0.01)) return name;
+  for(const p of presets){
+    if(PKEYS.every(k=>Math.abs(cfg[k]-p.v[k])<0.01)) return p.name;
   }
   return "";
+}
+
+async function loadPresets(){
+  try{ presets = await (await fetch("/api/presets")).json(); }
+  catch(e){ presets = []; }
+  if(!Array.isArray(presets)) presets = [];
+  renderPresets();
+}
+
+async function savePresets(body){
+  try{
+    const r = await fetch("/api/presets",{method:"POST",
+      headers:{"Content-Type":"application/json"},body:JSON.stringify(body)});
+    if(!r.ok) throw 0;
+    presets = await r.json();
+    renderPresets();
+    toast("Saved");
+  }catch(e){ toast("Could not save preset"); }
+}
+
+function buildPresets(){
+  const sel=$("preset");
+  sel.addEventListener("change",()=>{
+    const p = presets.find(x=>x.name===sel.value);
+    $("btnDelPreset").disabled = !sel.value;
+    if(!p) return;
+    patch(p.v).then(()=>fillConfig(cfg));
+  });
+  $("btnSavePreset").addEventListener("click",()=>{
+    const suggested = sel.value || "";
+    const name = prompt("Save these settings as:", suggested);
+    if(name===null) return;
+    const v={}; PKEYS.forEach(k=>v[k]=cfg[k]);
+    savePresets({name:name.trim(), v:v});
+  });
+  $("btnDelPreset").addEventListener("click",()=>{
+    const name = sel.value;
+    if(!name) return;
+    if(confirm("Delete the preset \u201C"+name+"\u201D?"))
+      savePresets({name:name, "delete":true});
+  });
+}
+
+/* ---------- the Home Assistant walkthrough ---------- */
+function wireGuide(){
+  const dlg=$("guide");
+  const open=()=>{ if(dlg.showModal) dlg.showModal(); };
+  $("btnGuide").addEventListener("click",open);
+  $("btnGuide2").addEventListener("click",open);
+  $("guideClose").addEventListener("click",()=>dlg.close());
+  dlg.addEventListener("click",e=>{ if(e.target===dlg) dlg.close(); });
+  $("copyYaml").addEventListener("click",()=>{
+    const txt=$("autoYaml").textContent;
+    if(navigator.clipboard) navigator.clipboard.writeText(txt)
+      .then(()=>toast("Copied")).catch(()=>toast("Copy failed"));
+    else toast("Select and copy the block");
+  });
 }
 
 function buildZones(){
@@ -665,7 +795,7 @@ function buildZones(){
 function wire(){
   NUMS.forEach(k=>{ const el=$(k); if(el)
     el.addEventListener("change",()=>patch({[k]:parseFloat(el.value)})
-      .then(()=>{ $("preset").value = matchPreset(); })); });
+      .then(()=>renderPresets())); });
   TEXTS.forEach(k=>{ const el=$(k); if(el)
     el.addEventListener("change",()=>patch({[k]:el.value})); });
   SWS.forEach(k=>{ const el=$(k); if(el)
@@ -701,13 +831,12 @@ function wire(){
       fetch("/api/restart",{method:"POST"}); toast("Restarting");
     }
   });
-  wireNav(); wireHelp(); buildPresets(); buildZones();
+  wireNav(); wireHelp(); buildPresets(); buildZones(); wireGuide();
 }
 
 function showMode(m){
   $("modeMqtt").classList.toggle("hide", m!=1);
-  $("modeRelay").classList.toggle("hide", m!=2);
-  $("modeHttp").classList.toggle("hide", m!=3);
+  $("modeHttp").classList.toggle("hide", m!=2);
 }
 
 function fillConfig(c){
@@ -724,7 +853,7 @@ function fillConfig(c){
   $("manualFanRow").style.display = c.autoMode?"none":"";
   if(c.tz) $("tz").value = c.tz;
   ready=true;
-  $("preset").value = matchPreset();
+  renderPresets();
 }
 
 const GT=6, GH=198, LO=60, HI=100;
@@ -769,6 +898,8 @@ function paint(s){
   $("uptime").textContent = Math.floor(s.uptime/3600)+"h "+
     (Math.floor(s.uptime/60)%60)+"m";
   $("mqttState").textContent = s.mqtt?"Connected to broker.":"Not connected.";
+  $("mqttFogState").textContent = s.mqtt ? "Publishing to the broker"
+    : "Broker not connected yet";
   $("clock").textContent = s.epoch ?
     new Date(s.epoch*1000).toLocaleString() : "Not synced";
 
@@ -888,6 +1019,7 @@ async function tick(){
 async function boot(){
   wire(); wireUpdate();
   try{ fillConfig(await (await fetch("/api/config")).json()); }catch(e){}
+  await loadPresets();
   await tick();
   const draw = async()=>{
     try{ chart((await (await fetch("/api/history")).json()).rh); }catch(e){} };

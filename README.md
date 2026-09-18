@@ -15,7 +15,7 @@ Home Assistant sensors are an optional bonus over MQTT.
 | 4-pin PWM fan | 12 V PC fan |
 | N-channel MOSFET module | Cuts fan power so it can stop completely |
 | 12 V supply | For the fan |
-| A way to switch the fogger | See below |
+| A smart plug or HTTP-controllable switch | For the fogger, see below |
 
 ### Wiring
 
@@ -26,7 +26,6 @@ Home Assistant sensors are an optional bonus over MQTT.
 | Fan PWM (blue) | GPIO25 |
 | Fan tach (green) | GPIO26 |
 | MOSFET gate | GPIO27 |
-| Relay (optional) | GPIO33 |
 
 ## Flashing
 
@@ -46,9 +45,6 @@ No credentials live in this repo, so it is safe to publish or share.
 Chosen in the web UI under *Fogger wiring*, not at compile time. Swapping
 hardware later is a dropdown, not a reflash.
 
-**Relay or SSR on the board.** The board switches the fogger's power directly.
-Nothing else involved, works with the router unplugged. Mains wiring belongs in
-a closed, fused enclosure.
 
 **Another device over HTTP.** Point it at any device with a URL-based API,
 including another ESPHome node:
