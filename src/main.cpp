@@ -171,42 +171,48 @@ static void setupRoutes() {
   });
 
   // ---- Firmware update over the air -------------------------------------
-  // The browser POSTs a .bin here. The old firmware keeps running from one
-  // flash slot while the new one is written to the other, so a failed or
-  // abandoned upload leaves the board exactly as it was.
+  // The browser PUTs the raw .bin as the request body. No multipart parsing,
+  // which is the part that tends to stall on the async server.
+  // The old firmware keeps running from one flash slot while the new one is
+  // written to the other, so a failed upload leaves the board as it was.
   server.on("/api/update", HTTP_POST,
     [](AsyncWebServerRequest* r) {
-      bool ok = !Update.hasError();
+      bool ok = !Update.hasError() && Update.isFinished();
       AsyncWebServerResponse* res = r->beginResponse(
         ok ? 200 : 500, "application/json",
-        ok ? "{\"ok\":true}" : "{\"ok\":false,\"error\":\"write failed\"}");
+        ok ? "{\"ok\":true}" : "{\"ok\":false}");
       res->addHeader("Connection", "close");
       r->send(res);
       st.updating = false;
       if (ok) shouldReboot = true;
+      else Serial.println("[ota] failed, still on the old firmware");
     },
-    [](AsyncWebServerRequest* r, String filename, size_t index,
-       uint8_t* data, size_t len, bool final) {
+    NULL,
+    [](AsyncWebServerRequest* r, uint8_t* data, size_t len,
+       size_t index, size_t total) {
       if (index == 0) {
-        Serial.printf("[ota] receiving %s\n", filename.c_str());
-        // Everything off before we touch flash. A half-written update must
-        // never leave the fogger running.
+        Serial.printf("[ota] start, %u bytes\n", (unsigned)total);
         st.updating = true;
         fog::allOff();
-        // No interrupts while flash is being written.
         detachInterrupt(digitalPinToInterrupt(PIN_FAN_TACH));
-        if (!Update.begin(UPDATE_SIZE_UNKNOWN)) {
+        if (!Update.begin(total ? total : UPDATE_SIZE_UNKNOWN)) {
           Update.printError(Serial);
           st.updating = false;
           return;
         }
       }
-      if (Update.isRunning() && Update.write(data, len) != len) {
+      if (!Update.isRunning()) return;
+
+      if (Update.write(data, len) != len) {
         Update.printError(Serial);
+        Update.abort();
+        return;
       }
-      if (final) {
-        if (Update.end(true)) Serial.printf("[ota] wrote %u bytes\n",
-                                            (unsigned)(index + len));
+      if ((index / 65536) != ((index + len) / 65536))
+        Serial.printf("[ota] %u / %u\n", (unsigned)(index + len), (unsigned)total);
+
+      if (index + len >= total) {
+        if (Update.end(true)) Serial.println("[ota] write complete");
         else Update.printError(Serial);
       }
     });

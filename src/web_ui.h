@@ -856,11 +856,13 @@ function wireUpdate(){
     wrap.classList.remove("hide");
     drop.textContent="Uploading "+f.name;
     note.textContent="Do not close this page or unplug the board.";
-    const fd=new FormData(); fd.append("update",f);
     const xhr=new XMLHttpRequest();
     xhr.open("POST","/api/update");
+    xhr.setRequestHeader("Content-Type","application/octet-stream");
+    xhr.timeout = 180000;
     xhr.upload.onprogress=e=>{
       if(e.lengthComputable) bar.style.width=(e.loaded/e.total*100)+"%"; };
+    xhr.ontimeout=()=>fail("Upload timed out. Still on the old firmware.");
     xhr.onload=()=>{
       if(xhr.status===200){
         bar.style.width="100%"; drop.textContent="Installed";
@@ -873,6 +875,8 @@ function wireUpdate(){
       drop.textContent="Drop a .bin here, or click to choose";
       note.textContent=msg; wrap.classList.add("hide"); bar.style.width="0";
     }
+    // Raw body, not a form. Multipart parsing tends to stall the board.
+    xhr.send(f);
   }
 }
 
