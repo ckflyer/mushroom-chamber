@@ -130,13 +130,20 @@ inline float loadCredit(float dflt) {
   return v;
 }
 
+// The relay module decides what "on" means. Active-low boards are common, so
+// the polarity is a setting rather than something you rewire or reflash for.
+inline void _fanPower(bool on) {
+  digitalWrite(PIN_FAN_POWER, cfg.relayActiveLow ? (on ? LOW : HIGH)
+                                                 : (on ? HIGH : LOW));
+}
+
 inline void begin() {
   Wire.begin(PIN_SDA, PIN_SCL);
   Wire.setClock(50000);
   shtOk = sht.begin(0x44);
 
   pinMode(PIN_FAN_POWER, OUTPUT);
-  digitalWrite(PIN_FAN_POWER, LOW);
+  _fanPower(false);
   FAN_PWM_BEGIN();
   FAN_PWM_WRITE(0);
 
@@ -148,20 +155,49 @@ inline void begin() {
 
 inline void _applyFan(uint8_t pct) {
   if (pct == 0) {
+    // PWM to zero FIRST, then drop the relay. Cutting power to a fan that is
+    // still being commanded is what makes it grunt on shutdown.
     FAN_PWM_WRITE(0);
-    digitalWrite(PIN_FAN_POWER, LOW);   // MOSFET cut, so RPM reaches true zero
+    _fanPower(false);
   } else {
-    digitalWrite(PIN_FAN_POWER, HIGH);
+    _fanPower(true);
     FAN_PWM_WRITE(map(pct, 0, 100, 0, 255));
   }
   st.fanSpeed = pct;
 }
 
+// Consecutive failed reads. A single dropped read is normal noise on a long
+// I2C run; a run of them means the sensor is gone.
+inline uint8_t _readFails = 0;
+#define SENSOR_FAIL_LIMIT 3
+
 inline void _readSensor() {
-  if (!shtOk) { shtOk = sht.begin(0x44); return; }
+  if (!shtOk) {
+    shtOk = sht.begin(0x44);
+    if (!shtOk) return;   // readings already blanked below; fault timer runs
+  }
   float t = sht.readTemperature();
   float h = sht.readHumidity();
-  if (isnan(t) || isnan(h)) return;
+
+  if (isnan(t) || isnan(h)) {
+    // Returning here without blanking is what used to break fault detection:
+    // st.rh kept its last good value forever, rhOk stayed true, sensorFailS
+    // reset every tick, and the controller happily fogged against a frozen
+    // reading. Blank the readings so the fault timer can actually run.
+    if (_readFails < 255) _readFails++;
+    if (_readFails >= SENSOR_FAIL_LIMIT) {
+      st.temp = NAN;
+      st.rh = NAN;
+      st.dewPoint = NAN;
+      st.vpd = NAN;
+      st.atCeiling = false;
+      _bufN = 0;          // the median buffer is stale too
+      _bufI = 0;
+      shtOk = false;      // retry begin() on the next tick
+    }
+    return;
+  }
+  _readFails = 0;
 
   _tBuf[_bufI] = t;
   _hBuf[_bufI] = h;

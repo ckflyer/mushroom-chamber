@@ -486,6 +486,16 @@ dialog::backdrop{background:rgba(0,0,0,.65)}
           plus five.</p>
       </div>
       <div class="row">
+        <div class="lbl">Relay is active-low
+          <button class="help" aria-expanded="false" aria-label="About relay polarity">?</button>
+        </div>
+        <button class="sw" id="relayActiveLow" role="switch"
+          aria-label="Relay is active-low"></button>
+        <p class="helptext hide">Many relay modules switch ON when their IN pin
+          is pulled LOW. If the fan runs when it should be off and stops when it
+          should run, turn this on. Press Spin the fan to test.</p>
+      </div>
+      <div class="row">
         <div class="lbl">Stir after fog
           <button class="help" aria-expanded="false" aria-label="About stir">?</button>
         </div>
@@ -632,7 +642,7 @@ const NUMS = ["targetRh","maxRh","deadband","fogBurstS","fogSettleS",
   "fogBudgetS","faeIntervalMin","faeDurationS","faeFanSpeed","fanMinDuty",
   "mixDurationS","mqttPort"];
 const TEXTS = ["httpOnUrl","httpOffUrl","mqttHost","mqttUser"];
-const SWS = ["mqttEnabled","haDiscovery"];
+const SWS = ["relayActiveLow","mqttEnabled","haDiscovery"];
 // What a preset captures.
 const PKEYS = ["targetRh","maxRh","faeIntervalMin","faeDurationS","faeFanSpeed"];
 

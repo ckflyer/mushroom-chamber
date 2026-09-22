@@ -8,7 +8,7 @@
 
 // Bump this on every release. Shown in the dashboard so people can tell
 // whether they are running the latest build.
-#define FW_VERSION "1.2.0"
+#define FW_VERSION "1.3.0"
 
 // Reachable at http://<this>.local, and how the board names itself to your
 // router. Letters, digits and hyphens only.
@@ -20,7 +20,9 @@
 #define PIN_SCL        22   // SHT31 clock
 #define PIN_FAN_PWM    25   // 4-pin fan, blue wire
 #define PIN_FAN_TACH   26   // 4-pin fan, green wire
-#define PIN_FAN_POWER  27   // MOSFET gate, cuts fan power so RPM reaches zero
+#define PIN_FAN_POWER  27   // Relay IN. Switches +12V on the high side, so the
+                            // fan's ground stays common with the board and the
+                            // tach line never floats up to 12V.
 
 // ---- How the fogger gets switched ------------------------------------------
 // Chosen in the web UI at runtime, not at compile time, so swapping hardware
@@ -52,6 +54,9 @@ struct Config {
   uint8_t  fanMinDuty   = 25;    // slowest duty the fan reliably turns at
   uint16_t mixDurationS = 0;     // post-fog stir; 0 unless a SEPARATE
                                  // internal circulation fan is fitted
+  bool relayActiveLow = false;   // true if the relay module switches on when
+                                 // IN is pulled LOW. Many modules do. Flip it
+                                 // in the UI rather than rewiring.
 
   // Dry-down
   uint16_t purgeDelayMin  = 10;
@@ -97,6 +102,7 @@ inline void configToJson(JsonObject o) {
   o["faeFanSpeed"] = cfg.faeFanSpeed;
   o["fanMinDuty"] = cfg.fanMinDuty;
   o["mixDurationS"] = cfg.mixDurationS;
+  o["relayActiveLow"] = cfg.relayActiveLow;
   o["purgeDelayMin"] = cfg.purgeDelayMin;
   o["purgeDeadband"] = cfg.purgeDeadband;
   o["purgeFanSpeed"] = cfg.purgeFanSpeed;
@@ -141,6 +147,7 @@ inline void configFromJson(JsonObjectConst o) {
   F_NUM(sensorFaultS, cfg.sensorFaultS, 10, 600)
   F_NUM(foggerMode, cfg.foggerMode, 0, 2)
   F_NUM(mqttPort, cfg.mqttPort, 1, 65535)
+  F_BOOL(relayActiveLow, cfg.relayActiveLow)
   F_BOOL(mqttEnabled, cfg.mqttEnabled)
   F_BOOL(haDiscovery, cfg.haDiscovery)
   F_BOOL(autoMode, cfg.autoMode)

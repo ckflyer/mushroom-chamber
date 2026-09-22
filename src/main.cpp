@@ -259,6 +259,16 @@ static void setupRoutes() {
 // ---- Boot ------------------------------------------------------------------
 
 void setup() {
+  // Before anything else. An unconfigured pin floats: the relay can click on,
+  // and a floating PWM line reads as 100% duty to the fan, so you get full
+  // blast between reset and ledcAttach. Relay polarity is not known until
+  // configLoad() runs a few lines down, so ctrl::begin() re-asserts the off
+  // state once it is.
+  pinMode(PIN_FAN_PWM, OUTPUT);
+  digitalWrite(PIN_FAN_PWM, LOW);
+  pinMode(PIN_FAN_POWER, OUTPUT);
+  digitalWrite(PIN_FAN_POWER, LOW);
+
   Serial.begin(115200);
   delay(200);
   Serial.println("\n[boot] mushroom chamber");
