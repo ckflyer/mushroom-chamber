@@ -93,8 +93,24 @@ inline uint32_t lastTach = 0, lastHist = 0;
 // the fan keeps spinning during a firmware write and an ISR living in flash
 // would crash once the flash cache is disabled.
 static volatile uint32_t tachPulses = 0;
+static volatile uint32_t tachLastUs = 0;
 
-static void IRAM_ATTR tachISR() { tachPulses++; }
+// A 4-pin fan's PWM line switches at 25 kHz and usually runs in the same
+// bundle as the tach wire. Through the ESP32's weak internal pull-up that
+// couples across and fakes edges, which is why RPM reads tens of thousands at
+// part duty but is correct at 100% (where the PWM line stops switching).
+//
+// Real pulses cannot arrive faster than ~15 ms apart even at 2000 RPM with
+// 2 pulses/rev. Anything closer than 5 ms is noise, so drop it. That leaves a
+// ceiling around 6000 RPM, far above anything this fan can do.
+#define TACH_MIN_GAP_US 5000
+
+static void IRAM_ATTR tachISR() {
+  uint32_t now = micros();
+  if (now - tachLastUs < TACH_MIN_GAP_US) return;
+  tachLastUs = now;
+  tachPulses++;
+}
 
 // Three-sample median. One bad reading from the SHT31 should not be able to
 // trigger a burst or trip the emergency cutoff.
