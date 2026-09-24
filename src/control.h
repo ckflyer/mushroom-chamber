@@ -11,6 +11,7 @@
 // =============================================================================
 #pragma once
 #include <Arduino.h>
+#include <time.h>
 #include <Wire.h>
 #include <Adafruit_SHT31.h>
 #include "config.h"
@@ -27,6 +28,29 @@
 #endif
 
 enum FogState : uint8_t { FOG_IDLE = 0, FOG_BURST = 1, FOG_SETTLE = 2 };
+
+// ---- Event log -------------------------------------------------------------
+// A small ring of things that actually happened, so a glance at the dashboard
+// answers "what has it been doing" without a serial cable. RAM only; it starts
+// empty after a reboot, like the history chart.
+enum EvKind : uint8_t {
+  EV_BOOT = 0, EV_BURST, EV_GAIN, EV_EMERG, EV_DRY, EV_DRY_OK,
+  EV_FAULT, EV_FAULT_OK, EV_FAE, EV_FAE_END, EV_PURGE, EV_PURGE_END,
+  EV_BUDGET, EV_CEILING, EV_CEILING_OK
+};
+#define LOG_LEN 40
+struct LogEntry { uint32_t t; uint8_t k; int16_t v; };
+inline LogEntry logBuf[LOG_LEN];
+inline uint8_t logHead = 0, logCount = 0;
+
+inline void logEvent(uint8_t k, float v = 0) {
+  time_t now = time(nullptr);
+  logBuf[logHead].t = (now > 1700000000) ? (uint32_t)now : 0;
+  logBuf[logHead].k = k;
+  logBuf[logHead].v = (int16_t)lroundf(v * 10.0f);
+  logHead = (logHead + 1) % LOG_LEN;
+  if (logCount < LOG_LEN) logCount++;
+}
 enum FanReason : uint8_t {
   FAN_IDLE = 0, FAN_MANUAL, FAN_FRESH_AIR, FAN_DRYDOWN,
   FAN_HELD, FAN_MIXING, FAN_TEST
@@ -138,6 +162,7 @@ inline void saveCredit() {
 
 // Refill the hourly budget to full. Exposed for the dashboard's reset button.
 inline void resetCredit() {
+  logEvent(EV_BUDGET);
   st.fogCredit = cfg.fogBudgetS;
   saveCredit();
 }
@@ -164,6 +189,7 @@ inline void begin() {
   Wire.setClock(50000);
   shtOk = sht.begin(0x44);
 
+  logEvent(EV_BOOT);
   pinMode(PIN_FAN_POWER, OUTPUT);
   _fanPower(false);
   FAN_PWM_BEGIN();
@@ -242,7 +268,9 @@ inline void _readSensor() {
 
   // Within 1 C of dew point means this box is as humid as it can physically
   // get. More fog would only make water on the floor.
+  bool wasCeil = st.atCeiling;
   st.atCeiling = (t - st.dewPoint) < 1.0f;
+  if (st.atCeiling != wasCeil) logEvent(st.atCeiling ? EV_CEILING : EV_CEILING_OK);
 }
 
 inline void _recordHistory() {
@@ -260,7 +288,9 @@ inline void tick() {
   bool rhOk = !isnan(st.rh);
   if (rhOk) st.sensorFailS = 0;
   else if (st.sensorFailS < 60000) st.sensorFailS++;
+  bool wasFault = st.sensorFault;
   st.sensorFault = st.sensorFailS > cfg.sensorFaultS;
+  if (st.sensorFault != wasFault) logEvent(st.sensorFault ? EV_FAULT : EV_FAULT_OK);
 
   // ---- Fog budget, as a leaky bucket ----
   float budget = cfg.fogBudgetS;
@@ -281,12 +311,18 @@ inline void tick() {
       st.fogTimer = 0;
       st.burstStartRh = st.rh;
       Serial.printf("[fog] burst at %.1f%%\n", st.rh);
+      logEvent(EV_BURST, st.rh);
     }
-    st.forceBurst = false;
   } else if (s == FOG_BURST) {
     st.fogTimer++;
-    if (st.fogTimer >= cfg.fogBurstS || st.rh >= cfg.targetRh ||
-        st.fogCredit <= 0) {
+    // Deliberately blind to st.rh. A sensor anywhere near the fog path reads
+    // near-saturation within a second of the fogger starting, because it is
+    // sitting in airborne droplets that have not evaporated into humidity
+    // yet. Ending the burst on that reading cuts it to one tick and makes the
+    // fogger click on and straight back off. The burst is bounded by time,
+    // by the hourly budget, and by the emergency cutoff below - which is the
+    // check that exists for genuine runaway.
+    if (st.fogTimer >= cfg.fogBurstS || st.fogCredit <= 0) {
       s = FOG_SETTLE;
       st.fogTimer = 0;
       if (cfg.mixDurationS >= 1) { st.mixActive = true; st.mixS = 0; }
@@ -303,14 +339,18 @@ inline void tick() {
       if (!isnan(st.burstStartRh) && !st.atCeiling &&
           st.burstStartRh < cfg.targetRh) {
         st.lastRise = st.rh - st.burstStartRh;
+        logEvent(EV_GAIN, st.lastRise);
         if (st.lastRise < 0.3f) {
           if (st.dryStrikes < 200) st.dryStrikes++;
         } else {
           st.dryStrikes = 0;
         }
         bool low = st.dryStrikes >= 3;
-        if (low && !st.reservoirLow)
+        if (low && !st.reservoirLow) {
           Serial.println("[fog] three bursts with no effect - check water");
+          logEvent(EV_DRY);
+        }
+        if (!low && st.reservoirLow) logEvent(EV_DRY_OK);
         st.reservoirLow = low;
       }
       st.burstStartRh = NAN;
@@ -319,9 +359,15 @@ inline void tick() {
 
   if (rhOk && st.rh >= cfg.emergencyRh && s == FOG_BURST) {
     Serial.printf("[fog] emergency cutoff at %.1f%%\n", st.rh);
+    logEvent(EV_EMERG, st.rh);
     s = FOG_SETTLE;
     st.fogTimer = 0;
   }
+  // Cleared every tick, not just in the idle branch. Left latched, a request
+  // made during a burst or settle would sit waiting and then fire the moment
+  // settle ended - minutes later, at whatever humidity happened to be true
+  // then. A manual burst either happens now or not at all.
+  st.forceBurst = false;
   st.fogState = s;
 
   bool wantFog = (s == FOG_BURST);
@@ -398,6 +444,12 @@ inline void tick() {
   if (speed > 100) speed = 100;
 
   _applyFan(speed);
+  if (reason != st.fanReason) {
+    if (reason == FAN_FRESH_AIR)      logEvent(EV_FAE);
+    else if (st.fanReason == FAN_FRESH_AIR) logEvent(EV_FAE_END);
+    if (reason == FAN_DRYDOWN)        logEvent(EV_PURGE, st.rh);
+    else if (st.fanReason == FAN_DRYDOWN)   logEvent(EV_PURGE_END, st.rh);
+  }
   st.fanReason = reason;
 
   // ---- Tach + history ----

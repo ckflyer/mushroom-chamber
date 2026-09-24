@@ -81,8 +81,16 @@ static void sendState(AsyncWebServerRequest* req) {
   if (synced) {
     struct tm lt;
     localtime_r(&now, &lt);
+
+    // Built by hand rather than with strftime. The "%-m" no-padding flag is a
+    // glibc extension; newlib on the ESP32 does not implement it, and a failed
+    // conversion leaves the buffer holding whatever was there before.
     char buf[40];
-    strftime(buf, sizeof(buf), "%-m/%-d/%Y, %-I:%M:%S %p", &lt);
+    int h12 = lt.tm_hour % 12;
+    if (h12 == 0) h12 = 12;
+    snprintf(buf, sizeof(buf), "%d/%d/%d, %d:%02d:%02d %s",
+             lt.tm_mon + 1, lt.tm_mday, lt.tm_year + 1900,
+             h12, lt.tm_min, lt.tm_sec, lt.tm_hour < 12 ? "AM" : "PM");
     d["ltime"] = buf;
 
     // Seconds east of UTC, DST included. Read UTC's broken-down fields back
@@ -145,6 +153,20 @@ static void setupRoutes() {
   server.on("/api/state", HTTP_GET, sendState);
   server.on("/api/config", HTTP_GET, sendConfig);
   server.on("/api/history", HTTP_GET, sendHistory);
+
+  server.on("/api/log", HTTP_GET, [](AsyncWebServerRequest* r) {
+    String out = "[";
+    for (uint8_t i = 0; i < logCount; i++) {
+      // newest first
+      uint8_t idx = (logHead + LOG_LEN - 1 - i) % LOG_LEN;
+      if (i) out += ',';
+      out += "{\"t\":" + String(logBuf[idx].t)
+           + ",\"k\":" + String(logBuf[idx].k)
+           + ",\"v\":" + String(logBuf[idx].v / 10.0f, 1) + "}";
+    }
+    out += "]";
+    r->send(200, "application/json", out);
+  });
 
   // Refill the hourly fog budget. The cap is a safety backstop, so this is a
   // deliberate, confirmed action rather than something the UI does quietly.
@@ -215,8 +237,12 @@ static void setupRoutes() {
     });
 
   server.on("/api/fog-burst", HTTP_POST, [](AsyncWebServerRequest* r) {
-    st.forceBurst = true;
-    r->send(200, "application/json", "{\"ok\":true}");
+    // Only meaningful when idle. Accepting it mid-cycle and acting on it later
+    // is how a test burst ends up firing minutes after you asked for it.
+    bool idle = (st.fogState == FOG_IDLE);
+    if (idle) st.forceBurst = true;
+    r->send(200, "application/json",
+            idle ? "{\"ok\":true}" : "{\"ok\":false,\"busy\":true}");
   });
 
   server.on("/api/fan-test", HTTP_POST, [](AsyncWebServerRequest* r) {

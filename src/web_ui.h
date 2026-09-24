@@ -122,6 +122,16 @@ button:hover{border-color:var(--fog)}
 .sw[aria-checked=true]::after{transform:translateX(20px);background:var(--fog)}
 
 /* ---------- chart ---------- */
+.log{margin-top:14px;border-top:1px solid #1b2a23;padding-top:10px;
+  max-height:210px;overflow-y:auto}
+.log h3{font-size:11px;letter-spacing:.08em;color:#5d6f66;margin:0 0 7px;
+  font-weight:600}
+.log .e{display:flex;gap:9px;font-size:12px;padding:3px 0;color:#b9cdc2}
+.log .e time{color:#5d6f66;flex:0 0 66px;font-variant-numeric:tabular-nums}
+.log .e b{font-weight:500}
+.log .warn b{color:#e8b84b}
+.log .bad b{color:#e2714b}
+.log .none{color:#5d6f66;font-size:12px}
 .chartwrap{position:relative}
 .tip{position:absolute;pointer-events:none;display:none;z-index:6;
   background:#0d1512;border:1px solid #2b3d34;border-radius:6px;
@@ -255,6 +265,10 @@ dialog::backdrop{background:rgba(0,0,0,.65)}
             <div class="tile"><b id="fan">--</b><i>FAN</i></div>
             <div class="tile"><b id="lastRise">--</b><i>LAST GAIN</i></div>
             <div class="tile"><b id="fogUsed">--</b><i>FOG THIS HR</i></div>
+          </div>
+          <div class="log">
+            <h3>ACTIVITY</h3>
+            <div id="logList"><div class="none">Nothing logged yet</div></div>
           </div>
         </div>
       </div>
@@ -862,8 +876,12 @@ function wire(){
   $("btnFan").addEventListener("click",()=>{
     fetch("/api/fan-test",{method:"POST"}); toast("Fan running 15s");
   });
-  $("btnFog").addEventListener("click",()=>{
-    fetch("/api/fog-burst",{method:"POST"}); toast("Burst requested");
+  $("btnFog").addEventListener("click",async()=>{
+    try{
+      const r = await (await fetch("/api/fog-burst",{method:"POST"})).json();
+      toast(r.ok ? "Burst requested" : "Busy, already fogging or settling");
+      if(r.ok) setTimeout(loadLog,1500);
+    }catch(e){ toast("Could not reach the chamber"); }
   });
   $("btnResetFog").addEventListener("click",()=>{
     if(confirm("Refill the hourly fog budget to full?\n\n"+
@@ -871,7 +889,7 @@ function wire(){
                "If you are resetting it often, look for a leak instead.")){
       fetch("/api/resetfog",{method:"POST"});
       toast("Budget refilled");
-      setTimeout(tick,300);
+      setTimeout(tick,300); setTimeout(loadLog,600);
     }
   });
   $("btnReboot").addEventListener("click",()=>{
@@ -1031,6 +1049,42 @@ function wireHover(svg, tipId){
   svg.addEventListener("touchend",   hide);
 }
 
+
+// Event kinds mirror EvKind in control.h. tone: 0 normal, 1 warn, 2 bad.
+const EV = {
+  0:  ["Started up", 0, 0],
+  1:  ["Burst at", 0, 1],
+  2:  ["Gained", 0, 2],
+  3:  ["Emergency cutoff at", 2, 1],
+  4:  ["Three dud bursts, check water", 1, 0],
+  5:  ["Water back to normal", 0, 0],
+  6:  ["Sensor fault", 2, 0],
+  7:  ["Sensor recovered", 0, 0],
+  8:  ["Fresh air on", 0, 0],
+  9:  ["Fresh air off", 0, 0],
+  10: ["Dry-down started at", 1, 1],
+  11: ["Dry-down finished at", 0, 1],
+  12: ["Budget reset by hand", 1, 0],
+  13: ["At dew point ceiling", 1, 0],
+  14: ["Clear of dew point", 0, 0]
+};
+
+async function loadLog(){
+  let rows;
+  try{ rows = await (await fetch("/api/log")).json(); }catch(e){ return; }
+  const box = $("logList");
+  if(!rows.length){ box.innerHTML='<div class="none">Nothing logged yet</div>'; return; }
+  box.innerHTML = rows.map(r=>{
+    const d = EV[r.k] || ["Event", 0, 0];
+    const tone = d[1]===2 ? " bad" : (d[1]===1 ? " warn" : "");
+    let txt = d[0];
+    if(d[2]===1) txt += " "+r.v.toFixed(1)+"%";
+    if(d[2]===2) txt += " "+(r.v>=0?"+":"")+r.v.toFixed(1)+"%";
+    const when = r.t ? chamberClock(r.t) : "--";
+    return '<div class="e'+tone+'"><time>'+when+'</time><b>'+txt+'</b></div>';
+  }).join("");
+}
+
 function chart(vals, o){
   o = o || {};
   const id    = o.id    || "chart";
@@ -1151,9 +1205,21 @@ function wireUpdate(){
   }
 }
 
+// One dropped poll is normal: the board is single-threaded and busy, and a
+// 2 second poll will occasionally lose a race. Only call it lost after three
+// in a row, and leave the last known status on screen until then.
+let missed = 0;
 async function tick(){
-  try{ paint(await (await fetch("/api/state")).json()); }
-  catch(e){ $("status").textContent="Lost connection"; }
+  try{
+    const c = new AbortController();
+    const to = setTimeout(()=>c.abort(), 4000);
+    const r = await fetch("/api/state",{signal:c.signal});
+    clearTimeout(to);
+    paint(await r.json());
+    missed = 0;
+  }catch(e){
+    if(++missed >= 3) $("status").textContent = "Lost connection";
+  }
 }
 
 async function boot(){
@@ -1175,7 +1241,9 @@ async function boot(){
                    lo: f?60:15, hi: f?95:35, step: 5});
     }catch(e){} };
   await draw();
+  await loadLog();
   setInterval(tick,2000);
+  setInterval(loadLog,20000);
   setInterval(draw,60000);
 }
 boot();
