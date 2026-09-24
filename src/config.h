@@ -8,7 +8,7 @@
 
 // Bump this on every release. Shown in the dashboard so people can tell
 // whether they are running the latest build.
-#define FW_VERSION "1.4.1"
+#define FW_VERSION "1.5.0"
 
 // Reachable at http://<this>.local, and how the board names itself to your
 // router. Letters, digits and hyphens only.
@@ -54,6 +54,8 @@ struct Config {
   uint8_t  fanMinDuty   = 25;    // slowest duty the fan reliably turns at
   uint16_t mixDurationS = 0;     // post-fog stir; 0 unless a SEPARATE
                                  // internal circulation fan is fitted
+  bool useF = false;             // display only. Everything internal, and
+                                 // everything published to MQTT, stays Celsius.
   bool relayActiveLow = false;   // true if the relay module switches on when
                                  // IN is pulled LOW. Many modules do. Flip it
                                  // in the UI rather than rewiring.
@@ -102,6 +104,7 @@ inline void configToJson(JsonObject o) {
   o["faeFanSpeed"] = cfg.faeFanSpeed;
   o["fanMinDuty"] = cfg.fanMinDuty;
   o["mixDurationS"] = cfg.mixDurationS;
+  o["useF"] = cfg.useF;
   o["relayActiveLow"] = cfg.relayActiveLow;
   o["purgeDelayMin"] = cfg.purgeDelayMin;
   o["purgeDeadband"] = cfg.purgeDeadband;
@@ -147,6 +150,7 @@ inline void configFromJson(JsonObjectConst o) {
   F_NUM(sensorFaultS, cfg.sensorFaultS, 10, 600)
   F_NUM(foggerMode, cfg.foggerMode, 0, 2)
   F_NUM(mqttPort, cfg.mqttPort, 1, 65535)
+  F_BOOL(useF, cfg.useF)
   F_BOOL(relayActiveLow, cfg.relayActiveLow)
   F_BOOL(mqttEnabled, cfg.mqttEnabled)
   F_BOOL(haDiscovery, cfg.haDiscovery)

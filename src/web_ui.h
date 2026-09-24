@@ -525,6 +525,18 @@ dialog::backdrop{background:rgba(0,0,0,.65)}
         </div>
       </div>
 
+      <h2 style="margin-top:16px">DISPLAY</h2>
+      <div class="row">
+        <div class="lbl">Show temperature in &deg;F
+          <button class="help" aria-expanded="false" aria-label="About units">?</button>
+        </div>
+        <button class="sw" id="useF" role="switch"
+          aria-label="Show temperature in Fahrenheit"></button>
+        <p class="helptext hide">Changes this dashboard only. The chamber works
+          in Celsius internally and publishes Celsius to Home Assistant, which
+          converts to whatever unit you have set there.</p>
+      </div>
+
       <h2 style="margin-top:16px">CLOCK</h2>
       <div class="row">
         <div class="lbl">Timezone</div>
@@ -646,12 +658,13 @@ action:
 <script>
 const $ = id => document.getElementById(id);
 let cfg = {}, ready = false, epoch = 0, epochAt = 0, tzoff = 0;
+let draw = async()=>{};
 
 const NUMS = ["targetRh","maxRh","deadband","fogBurstS","fogSettleS",
   "fogBudgetS","faeIntervalMin","faeDurationS","faeFanSpeed","fanMinDuty",
   "mixDurationS","mqttPort"];
 const TEXTS = ["httpOnUrl","httpOffUrl","mqttHost","mqttUser"];
-const SWS = ["mqttEnabled","haDiscovery"];
+const SWS = ["useF","mqttEnabled","haDiscovery"];
 // What a preset captures.
 const PKEYS = ["targetRh","maxRh","faeIntervalMin","faeDurationS","faeFanSpeed"];
 
@@ -820,7 +833,8 @@ function wire(){
   SWS.forEach(k=>{ const el=$(k); if(el)
     el.addEventListener("click",()=>{
       const v = el.getAttribute("aria-checked")!=="true";
-      el.setAttribute("aria-checked",v); patch({[k]:v});
+      el.setAttribute("aria-checked",v); cfg[k]=v; patch({[k]:v});
+      if(k==="useF"){ tick(); draw(); }
     }); });
 
   $("mqttPass").addEventListener("change",e=>{
@@ -912,8 +926,8 @@ function paint(s){
   if(s.epoch){ epoch=s.epoch; epochAt=Date.now(); }
 
   $("rh").innerHTML = (s.rh==null?"--":s.rh.toFixed(1))+"<span>%</span>";
-  $("temp").textContent = s.temp==null?"--":s.temp.toFixed(1)+"\u00B0";
-  $("dew").textContent  = s.dew==null?"--":s.dew.toFixed(1)+"\u00B0";
+  $("temp").textContent = s.temp==null?"--":degs(s.temp).toFixed(1)+"\u00B0";
+  $("dew").textContent  = s.dew==null?"--":degs(s.dew).toFixed(1)+"\u00B0";
   $("vpd").textContent  = s.vpd==null?"--":s.vpd.toFixed(2);
   $("fan").textContent  = s.fan+"%";
   $("rpm").textContent  = s.rpm;
@@ -955,6 +969,10 @@ function paint(s){
     }
   }
 }
+
+// Display-only unit conversion. Readings arrive from the board in Celsius.
+function degs(c){ return (cfg && cfg.useF) ? c*9/5+32 : c; }
+function degUnit(){ return (cfg && cfg.useF) ? "\u00B0F" : "\u00B0C"; }
 
 // Shift the UTC epoch by the chamber's own offset, then read it back with
 // UTC getters. That gives chamber-local time regardless of where you are.
@@ -1071,13 +1089,13 @@ async function boot(){
   try{ fillConfig(await (await fetch("/api/config")).json()); }catch(e){}
   await loadPresets();
   await tick();
-  const draw = async()=>{
+  draw = async()=>{
     try{
       const h = await (await fetch("/api/history")).json();
       chart(h.rh, {id:"chart", foot:"chartLeft", unit:"%",
                    color:"#9fd8c8",
                    guide: ready?cfg.targetRh:undefined});
-      chart(h.t,  {id:"chartT", foot:"chartTLeft", unit:"\u00B0C",
+      chart(h.t.map(degs), {id:"chartT", foot:"chartTLeft", unit:degUnit(),
                    color:"#d8b48c", minPad:0.5});
     }catch(e){} };
   await draw();
