@@ -395,7 +395,7 @@ dialog::backdrop{background:rgba(0,0,0,.65)}
       </div>
   </div>
   <div class="panel">
-    <h2>HUMIDITY, LAST 24 HOURS</h2>
+    <h2 id="hHum">HUMIDITY, LAST 24 HOURS</h2>
     <div class="chartwrap">
     <svg class="chart" id="chart" viewBox="0 0 700 190"
          preserveAspectRatio="none" role="img"
@@ -407,7 +407,7 @@ dialog::backdrop{background:rgba(0,0,0,.65)}
   </div>
 
   <div class="panel">
-    <h2>TEMPERATURE, LAST 24 HOURS</h2>
+    <h2 id="hTmp">TEMPERATURE, LAST 24 HOURS</h2>
     <div class="chartwrap">
     <svg class="chart" id="chartT" viewBox="0 0 700 190"
          preserveAspectRatio="none" role="img"
@@ -1021,7 +1021,7 @@ function wireHover(svg, tipId){
       : (agoMin ? agoMin+" min ago" : "now");
     tip.innerHTML = "<b>"+v[i].toFixed(1)+svg._u+"</b><i>"+when+"</i>";
     tip.style.display = "block";
-    tip.style.left = (r.width * (i/(v.length-1))) + "px";
+    tip.style.left = (r.width * (svg._X(i)/700)) + "px";
     tip.style.top  = (svg.offsetTop + svg.offsetHeight * (svg._Y(v[i])/190)) + "px";
   };
   svg.addEventListener("mousemove", move);
@@ -1037,7 +1037,7 @@ function chart(vals, o){
   const foot  = o.foot  || "chartLeft";
   const unit  = (o.unit === undefined) ? "%" : o.unit;
   const color = o.color || "#9fd8c8";
-  const guide = o.guide;            // dashed reference line, or undefined
+  const step  = o.step  || 10;
   const svg=$(id);
   if(!svg) return;
   if(!vals||vals.length<2){
@@ -1045,46 +1045,63 @@ function chart(vals, o){
       'text-anchor="middle">Collecting readings</text>';
     return;
   }
-  const W=700,H=190,P=8;
-  let lo=Math.min(...vals), hi=Math.max(...vals);
-  if(guide!==undefined){ lo=Math.min(lo,guide); hi=Math.max(hi,guide); }
-  const pad=Math.max(o.minPad===undefined?2:o.minPad,(hi-lo)*0.15);
-  lo-=pad; hi+=pad;
-  const X=i=>P+i*(W-2*P)/(vals.length-1);
-  const Y=v=>P+(H-2*P)*(1-(v-lo)/(hi-lo));
-  let d="M"+X(0)+","+Y(vals[0]);
-  for(let i=1;i<vals.length;i++) d+="L"+X(i).toFixed(1)+","+Y(vals[i]).toFixed(1);
+  const W=700,H=190,L=42,R=10,T=12,B=14;
+
+  // Fixed scale. Autoscaling makes a calm day and a crisis look identical,
+  // so the axis only ever grows past its defaults, never shrinks inside them.
+  let lo=o.lo, hi=o.hi;
+  const dmin=Math.min(...vals), dmax=Math.max(...vals);
+  if(o.guide!==undefined){ lo=Math.min(lo,o.guide); hi=Math.max(hi,o.guide); }
+  if(dmin<lo) lo=Math.floor((dmin-step/2)/step)*step;
+  if(dmax>hi) hi=Math.ceil((dmax+step/2)/step)*step;
+
+  const X=i=>L+i*(W-L-R)/(vals.length-1);
+  const Y=v=>T+(H-T-B)*(1-(v-lo)/(hi-lo));
   let g="";
-  if(guide!==undefined){
-    const ty=Y(guide).toFixed(1);
-    g+='<line x1="0" y1="'+ty+'" x2="700" y2="'+ty+'" stroke="#e6ebe4" '+
-       'stroke-width="1" stroke-dasharray="4 3" opacity=".4"/>';
+
+  for(let v=Math.ceil(lo/step)*step; v<=hi+0.001; v+=step){
+    const y=Y(v).toFixed(1);
+    g+='<line x1="'+L+'" y1="'+y+'" x2="'+(W-R)+'" y2="'+y+'" '+
+       'stroke="#1b2a23" stroke-width="1"/>';
+    g+='<text x="'+(L-6)+'" y="'+(+y+4)+'" fill="#5d6f66" font-size="11" '+
+       'text-anchor="end">'+(step<1?v.toFixed(1):Math.round(v))+'</text>';
   }
+  if(o.guide!==undefined){
+    const ty=Y(o.guide).toFixed(1);
+    g+='<line x1="'+L+'" y1="'+ty+'" x2="'+(W-R)+'" y2="'+ty+'" '+
+       'stroke="#e6ebe4" stroke-width="1" stroke-dasharray="4 3" opacity=".45"/>';
+  }
+
+  let d="M"+X(0).toFixed(1)+","+Y(vals[0]).toFixed(1);
+  for(let i=1;i<vals.length;i++) d+="L"+X(i).toFixed(1)+","+Y(vals[i]).toFixed(1);
   g+='<path d="'+d+'" fill="none" stroke="'+color+'" stroke-width="2" '+
-     'stroke-linejoin="round"/>';
-  g+='<text x="5" y="14" fill="#7d9086" font-size="11">'+hi.toFixed(1)+unit+'</text>';
-  g+='<text x="5" y="185" fill="#7d9086" font-size="11">'+lo.toFixed(1)+unit+'</text>';
+     'stroke-linejoin="round" stroke-linecap="round"/>';
+
+  const li=vals.length-1;
+  g+='<circle cx="'+X(li).toFixed(1)+'" cy="'+Y(vals[li]).toFixed(1)+'" r="3" '+
+     'fill="'+color+'"/>';
+  g+='<text x="'+(W-R)+'" y="'+(T-2)+'" fill="'+color+'" font-size="11" '+
+     'text-anchor="end">'+vals[li].toFixed(1)+unit+'</text>';
+
   g+='<g id="'+id+'-hv" style="display:none">'+
-       '<line y1="0" y2="190" stroke="#7d9086" stroke-width="1" '+
-       'stroke-dasharray="3 3"/>'+
-       '<circle r="3.5" fill="'+color+'" stroke="#0d1512" stroke-width="1.5"/></g>';
+     '<line y1="'+T+'" y2="'+(H-B)+'" stroke="#7d9086" stroke-width="1" '+
+     'stroke-dasharray="3 3"/>'+
+     '<circle r="3.5" fill="'+color+'" stroke="#0d1512" stroke-width="1.5"/></g>';
   svg.innerHTML=g;
 
-  // Everything the hover readout needs, parked on the element itself.
   svg._v = vals; svg._u = unit; svg._X = X; svg._Y = Y;
   svg._end = epoch ? epoch + (Date.now()-epochAt)/1000 : 0;
   if(!svg._wired){ wireHover(svg, o.tip || "tip"); svg._wired = true; }
 
-  // The left-hand label is the timestamp of the OLDEST point on the chart,
-  // which is however long the board has been collecting - not the clock.
+  // Say how much history there actually is. "Last 24 hours" on 4 hours of
+  // data is a lie, and it is the first thing you need to judge the shape.
   const mins = vals.length;
-  const rel = mins<60 ? mins+" min ago"
-            : (mins/60).toFixed(mins<600?1:0)+"h ago";
+  const rel = mins<60 ? mins+" min" : (mins/60).toFixed(mins<600?1:0)+"h";
+  if(o.head && $(o.head)) $(o.head).textContent = o.title+", LAST "+rel.toUpperCase();
   if(epoch){
-    const now = epoch + (Date.now()-epochAt)/1000;
-    $(foot).textContent = chamberClock(now-mins*60)+" ("+rel+")";
+    $(foot).textContent = chamberClock(svg._end-mins*60)+" ("+rel+" ago)";
   } else {
-    $(foot).textContent = rel;
+    $(foot).textContent = rel+" ago";
   }
 }
 
@@ -1147,11 +1164,15 @@ async function boot(){
   draw = async()=>{
     try{
       const h = await (await fetch("/api/history")).json();
-      chart(h.rh, {id:"chart", foot:"chartLeft", unit:"%", tip:"tip",
-                   color:"#9fd8c8",
+      chart(h.rh, {id:"chart", foot:"chartLeft", head:"hHum", title:"HUMIDITY",
+                   unit:"%", tip:"tip", color:"#9fd8c8",
+                   lo:50, hi:100, step:10,
                    guide: ready?cfg.targetRh:undefined});
-      chart(h.t.map(degs), {id:"chartT", foot:"chartTLeft", unit:degUnit(), tip:"tipT",
-                   color:"#d8b48c", minPad:0.5});
+      const f = cfg && cfg.useF;
+      chart(h.t.map(degs), {id:"chartT", foot:"chartTLeft", head:"hTmp",
+                   title:"TEMPERATURE", unit:degUnit(), tip:"tipT",
+                   color:"#d8b48c",
+                   lo: f?60:15, hi: f?95:35, step: 5});
     }catch(e){} };
   await draw();
   setInterval(tick,2000);
