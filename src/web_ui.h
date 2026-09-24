@@ -122,6 +122,13 @@ button:hover{border-color:var(--fog)}
 .sw[aria-checked=true]::after{transform:translateX(20px);background:var(--fog)}
 
 /* ---------- chart ---------- */
+.chartwrap{position:relative}
+.tip{position:absolute;pointer-events:none;display:none;z-index:6;
+  background:#0d1512;border:1px solid #2b3d34;border-radius:6px;
+  padding:5px 8px;font-size:12px;line-height:1.35;color:#cfe3d8;
+  white-space:nowrap;transform:translate(-50%,-115%)}
+.tip b{color:#fff;font-weight:600}
+.tip i{display:block;font-style:normal;color:#7d9086;font-size:11px}
 .chart{width:100%;height:150px;display:block}
 .chartfoot{display:flex;justify-content:space-between;font-size:11px;
   color:var(--dim);margin-top:4px}
@@ -191,7 +198,6 @@ dialog::backdrop{background:rgba(0,0,0,.65)}
   <div class="spacer"></div>
   <div class="tabs" id="tabs">
     <button data-view="dash" aria-current="page">Dashboard</button>
-    <button data-view="fog">Fogging</button>
     <button data-view="setup">Setup</button>
   </div>
   <span id="modeLbl" style="font-size:13px;color:var(--dim)">Auto</span>
@@ -203,7 +209,6 @@ dialog::backdrop{background:rgba(0,0,0,.65)}
 
 <div class="drawer" id="drawer">
   <button data-view="dash" aria-current="page">Dashboard</button>
-  <button data-view="fog">Fogging</button>
   <button data-view="setup">Setup</button>
 </div>
 
@@ -248,7 +253,7 @@ dialog::backdrop{background:rgba(0,0,0,.65)}
             <div class="tile"><b id="dew">--</b><i>DEW POINT</i></div>
             <div class="tile"><b id="vpd">--</b><i>VPD kPa</i></div>
             <div class="tile"><b id="fan">--</b><i>FAN</i></div>
-            <div class="tile"><b id="rpm">--</b><i>RPM</i></div>
+            <div class="tile"><b id="lastRise">--</b><i>LAST GAIN</i></div>
             <div class="tile"><b id="fogUsed">--</b><i>FOG THIS HR</i></div>
           </div>
         </div>
@@ -266,8 +271,8 @@ dialog::backdrop{background:rgba(0,0,0,.65)}
           <button id="btnSavePreset" title="Save current settings as a preset">Save as</button>
           <button id="btnDelPreset" title="Delete this preset">&#215;</button>
         </div>
-        <p class="helptext hide">Saves target, max, and the three fresh air
-          settings under a name you choose. Nothing is built in, because the
+        <p class="helptext hide">Saves every setting on this page &mdash; humidity,
+          fresh air and fogging &mdash; under a name you choose. Nothing is built in, because the
           right numbers depend on your species, your chamber and your room.
           Find settings that work, then save them. Changing any of those values
           by hand switches back to Custom.</p>
@@ -316,33 +321,8 @@ dialog::backdrop{background:rgba(0,0,0,.65)}
         <div class="ctl"><input type="number" id="faeFanSpeed" min="1" max="100"
           step="5"><span class="unit">%</span></div>
       </div>
-    </div>
-  </div>
 
-  <div class="panel">
-    <h2>HUMIDITY, LAST 24 HOURS</h2>
-    <svg class="chart" id="chart" viewBox="0 0 700 190"
-         preserveAspectRatio="none" role="img"
-         aria-label="Humidity over the last 24 hours"></svg>
-    <div class="chartfoot"><span id="chartLeft">24h ago</span>
-      <span id="chartRight">now</span></div>
-  </div>
-
-  <div class="panel">
-    <h2>TEMPERATURE, LAST 24 HOURS</h2>
-    <svg class="chart" id="chartT" viewBox="0 0 700 190"
-         preserveAspectRatio="none" role="img"
-         aria-label="Temperature over the last 24 hours"></svg>
-    <div class="chartfoot"><span id="chartTLeft">24h ago</span>
-      <span id="chartTRight">now</span></div>
-  </div>
-</section>
-
-<!-- ==================== FOGGING ==================== -->
-<section class="view" id="v-fog">
-  <div class="two">
-    <div class="panel">
-      <h2>TIMING</h2>
+      <h2 style="margin-top:14px">FOGGING</h2>
       <div class="row">
         <div class="lbl">Burst
           <button class="help" aria-expanded="false" aria-label="About burst">?</button>
@@ -374,10 +354,6 @@ dialog::backdrop{background:rgba(0,0,0,.65)}
         <p class="helptext hide">How far below Target it may drift before
           fogging starts.</p>
       </div>
-    </div>
-
-    <div class="panel">
-      <h2>LIMITS</h2>
       <div class="row">
         <div class="lbl">Limit per hour
           <button class="help" aria-expanded="false" aria-label="About limit">?</button>
@@ -387,6 +363,21 @@ dialog::backdrop{background:rgba(0,0,0,.65)}
         <p class="helptext hide">Hard cap on total fogger run time per hour,
           whatever else goes wrong. Survives reboots. If you keep hitting it,
           look for leaks rather than raising it.</p>
+      </div>
+    </div>
+  </div>
+
+
+  <div class="panel">
+    <h2>STATUS</h2>
+      <div class="row">
+        <div class="lbl">Test burst
+          <button class="help" aria-expanded="false" aria-label="About test burst">?</button>
+        </div>
+        <div class="ctl"><button id="btnFog">Test burst</button></div>
+        <p class="helptext hide">Fires one burst now, ignoring target and
+          deadband. Still obeys the hourly limit and the emergency cutoff.
+          Use it for the sealed test, or to check the fogger is alive.</p>
       </div>
       <div class="row">
         <div class="lbl">Used this hour</div>
@@ -402,25 +393,33 @@ dialog::backdrop{background:rgba(0,0,0,.65)}
           for this regularly, something is leaking and the limit is doing its
           job. Fine after a deliberate test burst.</p>
       </div>
-      <div class="row">
-        <div class="lbl">Last burst gained
-          <button class="help" aria-expanded="false" aria-label="About rise">?</button>
-        </div>
-        <div class="ctl ro" id="lastRise">--</div>
-        <p class="helptext hide">Humidity gained by the most recent burst. Three
-          in a row near zero and the chamber warns you the water is out.</p>
-      </div>
-      <div class="row">
-        <div class="btns"><button id="btnFog">Test burst</button></div>
-      </div>
-      <p class="note">Burst plus Settle should divide into the hourly limit
-        sensibly. At 5 second bursts and 180 second settles the chamber uses
-        about 95 seconds an hour.</p>
+  </div>
+  <div class="panel">
+    <h2>HUMIDITY, LAST 24 HOURS</h2>
+    <div class="chartwrap">
+    <svg class="chart" id="chart" viewBox="0 0 700 190"
+         preserveAspectRatio="none" role="img"
+         aria-label="Humidity over the last 24 hours"></svg>
+    <div class="tip" id="tip"></div>
     </div>
+    <div class="chartfoot"><span id="chartLeft">24h ago</span>
+      <span id="chartRight">now</span></div>
+  </div>
+
+  <div class="panel">
+    <h2>TEMPERATURE, LAST 24 HOURS</h2>
+    <div class="chartwrap">
+    <svg class="chart" id="chartT" viewBox="0 0 700 190"
+         preserveAspectRatio="none" role="img"
+         aria-label="Temperature over the last 24 hours"></svg>
+    <div class="tip" id="tipT"></div>
+    </div>
+    <div class="chartfoot"><span id="chartTLeft">24h ago</span>
+      <span id="chartTRight">now</span></div>
   </div>
 </section>
 
-<!-- ==================== SETUP ==================== -->
+<!-- ==================== FOGGING ==================== -->
 <section class="view" id="v-setup">
   <div class="two">
     <div class="panel">
@@ -666,7 +665,12 @@ const NUMS = ["targetRh","maxRh","deadband","fogBurstS","fogSettleS",
 const TEXTS = ["httpOnUrl","httpOffUrl","mqttHost","mqttUser"];
 const SWS = ["useF","mqttEnabled","haDiscovery"];
 // What a preset captures.
-const PKEYS = ["targetRh","maxRh","faeIntervalMin","faeDurationS","faeFanSpeed"];
+// Everything a preset captures. All of these live on the dashboard, so a
+// preset never hides a value you cannot see. Presets saved by older firmware
+// hold only a subset; missing keys are skipped rather than applied as blanks.
+const PKEYS = ["targetRh","maxRh","deadband",
+  "fogBurstS","fogSettleS","fogBudgetS",
+  "faeIntervalMin","faeDurationS","faeFanSpeed"];
 
 // Plain names instead of POSIX strings nobody can read.
 const ZONES = [
@@ -753,7 +757,8 @@ function renderPresets(){
 // A preset is only "selected" while every one of its values still matches.
 function matchPreset(){
   for(const p of presets){
-    if(PKEYS.every(k=>Math.abs(cfg[k]-p.v[k])<0.01)) return p.name;
+    const keys = PKEYS.filter(k=>p.v[k]!==undefined);
+    if(keys.length && keys.every(k=>Math.abs(cfg[k]-p.v[k])<0.01)) return p.name;
   }
   return "";
 }
@@ -782,7 +787,8 @@ function buildPresets(){
     const p = presets.find(x=>x.name===sel.value);
     $("btnDelPreset").disabled = !sel.value;
     if(!p) return;
-    patch(p.v).then(()=>fillConfig(cfg));
+    const v={}; PKEYS.forEach(k=>{ if(p.v[k]!==undefined) v[k]=p.v[k]; });
+    patch(v).then(()=>fillConfig(cfg));
   });
   $("btnSavePreset").addEventListener("click",()=>{
     const suggested = sel.value || "";
@@ -930,7 +936,6 @@ function paint(s){
   $("dew").textContent  = s.dew==null?"--":degs(s.dew).toFixed(1)+"\u00B0";
   $("vpd").textContent  = s.vpd==null?"--":s.vpd.toFixed(2);
   $("fan").textContent  = s.fan+"%";
-  $("rpm").textContent  = s.rpm;
   $("fogUsed").textContent = s.fogUsed+"s";
   $("fogUsed2").textContent = s.fogUsed+" of "+(cfg.fogBudgetS||"--")+" sec";
   $("lastRise").textContent = s.lastRise==null?"--":
@@ -985,6 +990,47 @@ function chamberClock(ep){
   return h+":"+m+" "+ap;
 }
 
+
+// Reading a trend off a line is fine; reading a value off it is not. Hovering
+// (or dragging, on a phone) snaps to the nearest sample and shows the number.
+function wireHover(svg, tipId){
+  const tip = $(tipId);
+  const hv  = () => svg.querySelector("#"+svg.id+"-hv");
+  const hide = () => { tip.style.display="none";
+                       const g=hv(); if(g) g.style.display="none"; };
+  const move = e => {
+    const v = svg._v;
+    if(!v || v.length<2) return;
+    const pt = e.touches ? e.touches[0] : e;
+    const r  = svg.getBoundingClientRect();
+    let f = (pt.clientX - r.left) / r.width;
+    f = Math.max(0, Math.min(1, f));
+    const i = Math.round(f * (v.length-1));
+    const g = hv();
+    if(g){
+      const x = svg._X(i), y = svg._Y(v[i]);
+      g.style.display = "";
+      g.firstChild.setAttribute("x1", x);
+      g.firstChild.setAttribute("x2", x);
+      g.lastChild.setAttribute("cx", x);
+      g.lastChild.setAttribute("cy", y);
+    }
+    const agoMin = (v.length-1-i);
+    const when = svg._end
+      ? chamberClock(svg._end - agoMin*60)
+      : (agoMin ? agoMin+" min ago" : "now");
+    tip.innerHTML = "<b>"+v[i].toFixed(1)+svg._u+"</b><i>"+when+"</i>";
+    tip.style.display = "block";
+    tip.style.left = (r.width * (i/(v.length-1))) + "px";
+    tip.style.top  = (svg.offsetTop + svg.offsetHeight * (svg._Y(v[i])/190)) + "px";
+  };
+  svg.addEventListener("mousemove", move);
+  svg.addEventListener("mouseleave", hide);
+  svg.addEventListener("touchstart", move, {passive:true});
+  svg.addEventListener("touchmove",  move, {passive:true});
+  svg.addEventListener("touchend",   hide);
+}
+
 function chart(vals, o){
   o = o || {};
   const id    = o.id    || "chart";
@@ -1018,7 +1064,16 @@ function chart(vals, o){
      'stroke-linejoin="round"/>';
   g+='<text x="5" y="14" fill="#7d9086" font-size="11">'+hi.toFixed(1)+unit+'</text>';
   g+='<text x="5" y="185" fill="#7d9086" font-size="11">'+lo.toFixed(1)+unit+'</text>';
+  g+='<g id="'+id+'-hv" style="display:none">'+
+       '<line y1="0" y2="190" stroke="#7d9086" stroke-width="1" '+
+       'stroke-dasharray="3 3"/>'+
+       '<circle r="3.5" fill="'+color+'" stroke="#0d1512" stroke-width="1.5"/></g>';
   svg.innerHTML=g;
+
+  // Everything the hover readout needs, parked on the element itself.
+  svg._v = vals; svg._u = unit; svg._X = X; svg._Y = Y;
+  svg._end = epoch ? epoch + (Date.now()-epochAt)/1000 : 0;
+  if(!svg._wired){ wireHover(svg, o.tip || "tip"); svg._wired = true; }
 
   // The left-hand label is the timestamp of the OLDEST point on the chart,
   // which is however long the board has been collecting - not the clock.
@@ -1092,10 +1147,10 @@ async function boot(){
   draw = async()=>{
     try{
       const h = await (await fetch("/api/history")).json();
-      chart(h.rh, {id:"chart", foot:"chartLeft", unit:"%",
+      chart(h.rh, {id:"chart", foot:"chartLeft", unit:"%", tip:"tip",
                    color:"#9fd8c8",
                    guide: ready?cfg.targetRh:undefined});
-      chart(h.t.map(degs), {id:"chartT", foot:"chartTLeft", unit:degUnit(),
+      chart(h.t.map(degs), {id:"chartT", foot:"chartTLeft", unit:degUnit(), tip:"tipT",
                    color:"#d8b48c", minPad:0.5});
     }catch(e){} };
   await draw();
