@@ -320,12 +320,21 @@ dialog::backdrop{background:rgba(0,0,0,.65)}
   </div>
 
   <div class="panel">
-    <h2>LAST 24 HOURS</h2>
+    <h2>HUMIDITY, LAST 24 HOURS</h2>
     <svg class="chart" id="chart" viewBox="0 0 700 190"
          preserveAspectRatio="none" role="img"
          aria-label="Humidity over the last 24 hours"></svg>
     <div class="chartfoot"><span id="chartLeft">24h ago</span>
       <span id="chartRight">now</span></div>
+  </div>
+
+  <div class="panel">
+    <h2>TEMPERATURE, LAST 24 HOURS</h2>
+    <svg class="chart" id="chartT" viewBox="0 0 700 190"
+         preserveAspectRatio="none" role="img"
+         aria-label="Temperature over the last 24 hours"></svg>
+    <div class="chartfoot"><span id="chartTLeft">24h ago</span>
+      <span id="chartTRight">now</span></div>
   </div>
 </section>
 
@@ -382,6 +391,16 @@ dialog::backdrop{background:rgba(0,0,0,.65)}
       <div class="row">
         <div class="lbl">Used this hour</div>
         <div class="ctl ro" id="fogUsed2">--</div>
+      </div>
+      <div class="row">
+        <div class="lbl">Reset the hourly budget
+          <button class="help" aria-expanded="false" aria-label="About resetting">?</button>
+        </div>
+        <div class="ctl"><button id="btnResetFog">Reset budget</button></div>
+        <p class="helptext hide">Refills the budget to full immediately. The
+          cap exists to stop a fault flooding the tub, so if you are reaching
+          for this regularly, something is leaking and the limit is doing its
+          job. Fine after a deliberate test burst.</p>
       </div>
       <div class="row">
         <div class="lbl">Last burst gained
@@ -484,16 +503,6 @@ dialog::backdrop{background:rgba(0,0,0,.65)}
         <p class="helptext hide">The slowest your fan actually turns. Switch
           Auto off, lower the fan until it stalls, then enter that number
           plus five.</p>
-      </div>
-      <div class="row">
-        <div class="lbl">Relay is active-low
-          <button class="help" aria-expanded="false" aria-label="About relay polarity">?</button>
-        </div>
-        <button class="sw" id="relayActiveLow" role="switch"
-          aria-label="Relay is active-low"></button>
-        <p class="helptext hide">Many relay modules switch ON when their IN pin
-          is pulled LOW. If the fan runs when it should be off and stops when it
-          should run, turn this on. Press Spin the fan to test.</p>
       </div>
       <div class="row">
         <div class="lbl">Stir after fog
@@ -636,13 +645,13 @@ action:
 
 <script>
 const $ = id => document.getElementById(id);
-let cfg = {}, ready = false, epoch = 0, epochAt = 0;
+let cfg = {}, ready = false, epoch = 0, epochAt = 0, tzoff = 0;
 
 const NUMS = ["targetRh","maxRh","deadband","fogBurstS","fogSettleS",
   "fogBudgetS","faeIntervalMin","faeDurationS","faeFanSpeed","fanMinDuty",
   "mixDurationS","mqttPort"];
 const TEXTS = ["httpOnUrl","httpOffUrl","mqttHost","mqttUser"];
-const SWS = ["relayActiveLow","mqttEnabled","haDiscovery"];
+const SWS = ["mqttEnabled","haDiscovery"];
 // What a preset captures.
 const PKEYS = ["targetRh","maxRh","faeIntervalMin","faeDurationS","faeFanSpeed"];
 
@@ -836,6 +845,15 @@ function wire(){
   $("btnFog").addEventListener("click",()=>{
     fetch("/api/fog-burst",{method:"POST"}); toast("Burst requested");
   });
+  $("btnResetFog").addEventListener("click",()=>{
+    if(confirm("Refill the hourly fog budget to full?\n\n"+
+               "The limit is there to stop a fault flooding the tub. "+
+               "If you are resetting it often, look for a leak instead.")){
+      fetch("/api/resetfog",{method:"POST"});
+      toast("Budget refilled");
+      setTimeout(tick,300);
+    }
+  });
   $("btnReboot").addEventListener("click",()=>{
     if(confirm("Restart the chamber?")){
       fetch("/api/restart",{method:"POST"}); toast("Restarting");
@@ -910,8 +928,8 @@ function paint(s){
   $("mqttState").textContent = s.mqtt?"Connected to broker.":"Not connected.";
   $("mqttFogState").textContent = s.mqtt ? "Publishing to the broker"
     : "Broker not connected yet";
-  $("clock").textContent = s.epoch ?
-    new Date(s.epoch*1000).toLocaleString() : "Not synced";
+  if(s.tzoff!==undefined) tzoff = s.tzoff;
+  $("clock").textContent = s.ltime || "Not synced";
 
   let cls="state";
   if(s.fault) cls+=" bad";
@@ -938,8 +956,26 @@ function paint(s){
   }
 }
 
-function chart(vals){
-  const svg=$("chart");
+// Shift the UTC epoch by the chamber's own offset, then read it back with
+// UTC getters. That gives chamber-local time regardless of where you are.
+function chamberClock(ep){
+  const d = new Date((ep + tzoff)*1000);
+  let h = d.getUTCHours();
+  const m = String(d.getUTCMinutes()).padStart(2,"0");
+  const ap = h>=12 ? "PM" : "AM";
+  h = h%12 || 12;
+  return h+":"+m+" "+ap;
+}
+
+function chart(vals, o){
+  o = o || {};
+  const id    = o.id    || "chart";
+  const foot  = o.foot  || "chartLeft";
+  const unit  = (o.unit === undefined) ? "%" : o.unit;
+  const color = o.color || "#9fd8c8";
+  const guide = o.guide;            // dashed reference line, or undefined
+  const svg=$(id);
+  if(!svg) return;
   if(!vals||vals.length<2){
     svg.innerHTML='<text x="350" y="95" fill="#7d9086" font-size="13" '+
       'text-anchor="middle">Collecting readings</text>';
@@ -947,31 +983,35 @@ function chart(vals){
   }
   const W=700,H=190,P=8;
   let lo=Math.min(...vals), hi=Math.max(...vals);
-  if(ready){ lo=Math.min(lo,cfg.targetRh); hi=Math.max(hi,cfg.targetRh); }
-  const pad=Math.max(2,(hi-lo)*0.15); lo-=pad; hi+=pad;
+  if(guide!==undefined){ lo=Math.min(lo,guide); hi=Math.max(hi,guide); }
+  const pad=Math.max(o.minPad===undefined?2:o.minPad,(hi-lo)*0.15);
+  lo-=pad; hi+=pad;
   const X=i=>P+i*(W-2*P)/(vals.length-1);
   const Y=v=>P+(H-2*P)*(1-(v-lo)/(hi-lo));
   let d="M"+X(0)+","+Y(vals[0]);
   for(let i=1;i<vals.length;i++) d+="L"+X(i).toFixed(1)+","+Y(vals[i]).toFixed(1);
   let g="";
-  if(ready){
-    const ty=Y(cfg.targetRh).toFixed(1);
+  if(guide!==undefined){
+    const ty=Y(guide).toFixed(1);
     g+='<line x1="0" y1="'+ty+'" x2="700" y2="'+ty+'" stroke="#e6ebe4" '+
        'stroke-width="1" stroke-dasharray="4 3" opacity=".4"/>';
   }
-  g+='<path d="'+d+'" fill="none" stroke="#9fd8c8" stroke-width="2" '+
+  g+='<path d="'+d+'" fill="none" stroke="'+color+'" stroke-width="2" '+
      'stroke-linejoin="round"/>';
-  g+='<text x="5" y="14" fill="#7d9086" font-size="11">'+hi.toFixed(0)+'%</text>';
-  g+='<text x="5" y="185" fill="#7d9086" font-size="11">'+lo.toFixed(0)+'%</text>';
+  g+='<text x="5" y="14" fill="#7d9086" font-size="11">'+hi.toFixed(1)+unit+'</text>';
+  g+='<text x="5" y="185" fill="#7d9086" font-size="11">'+lo.toFixed(1)+unit+'</text>';
   svg.innerHTML=g;
 
+  // The left-hand label is the timestamp of the OLDEST point on the chart,
+  // which is however long the board has been collecting - not the clock.
+  const mins = vals.length;
+  const rel = mins<60 ? mins+" min ago"
+            : (mins/60).toFixed(mins<600?1:0)+"h ago";
   if(epoch){
     const now = epoch + (Date.now()-epochAt)/1000;
-    $("chartLeft").textContent = new Date((now-vals.length*60)*1000)
-      .toLocaleTimeString([],{hour:"numeric",minute:"2-digit"});
+    $(foot).textContent = chamberClock(now-mins*60)+" ("+rel+")";
   } else {
-    $("chartLeft").textContent = vals.length<60 ? vals.length+" min ago"
-      : (vals.length/60).toFixed(0)+"h ago";
+    $(foot).textContent = rel;
   }
 }
 
@@ -1032,7 +1072,14 @@ async function boot(){
   await loadPresets();
   await tick();
   const draw = async()=>{
-    try{ chart((await (await fetch("/api/history")).json()).rh); }catch(e){} };
+    try{
+      const h = await (await fetch("/api/history")).json();
+      chart(h.rh, {id:"chart", foot:"chartLeft", unit:"%",
+                   color:"#9fd8c8",
+                   guide: ready?cfg.targetRh:undefined});
+      chart(h.t,  {id:"chartT", foot:"chartTLeft", unit:"\u00B0C",
+                   color:"#d8b48c", minPad:0.5});
+    }catch(e){} };
   await draw();
   setInterval(tick,2000);
   setInterval(draw,60000);

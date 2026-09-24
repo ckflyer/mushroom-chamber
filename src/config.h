@@ -8,7 +8,7 @@
 
 // Bump this on every release. Shown in the dashboard so people can tell
 // whether they are running the latest build.
-#define FW_VERSION "1.3.1"
+#define FW_VERSION "1.4.1"
 
 // Reachable at http://<this>.local, and how the board names itself to your
 // router. Letters, digits and hyphens only.

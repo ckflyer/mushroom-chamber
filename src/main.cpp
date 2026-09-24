@@ -72,7 +72,29 @@ static void sendState(AsyncWebServerRequest* req) {
   d["dry"] = st.reservoirLow;
   if (isnan(st.lastRise)) d["lastRise"] = nullptr; else d["lastRise"] = st.lastRise;
   time_t now = time(nullptr);
-  d["epoch"] = (now > 1700000000) ? (uint32_t)now : 0;   // 0 = clock not set
+  bool synced = now > 1700000000;
+  d["epoch"] = synced ? (uint32_t)now : 0;   // 0 = clock not set
+
+  // The chamber does its own timezone conversion. Letting the browser do it
+  // means the clock reads correctly at home and wrongly from a hotel in
+  // another timezone, and makes the Timezone setting here do nothing.
+  if (synced) {
+    struct tm lt;
+    localtime_r(&now, &lt);
+    char buf[40];
+    strftime(buf, sizeof(buf), "%-m/%-d/%Y, %-I:%M:%S %p", &lt);
+    d["ltime"] = buf;
+
+    // Seconds east of UTC, DST included. Read UTC's broken-down fields back
+    // as if they were local: the gap between that and now is the offset.
+    struct tm gt;
+    gmtime_r(&now, &gt);
+    gt.tm_isdst = -1;
+    d["tzoff"] = (int32_t)(now - mktime(&gt));
+  } else {
+    d["ltime"] = nullptr;
+    d["tzoff"] = 0;
+  }
   d["uptime"] = millis() / 1000;
   d["heap"] = ESP.getFreeHeap();
   d["version"] = FW_VERSION;
@@ -93,13 +115,19 @@ static void sendConfig(AsyncWebServerRequest* req) {
 
 static void sendHistory(AsyncWebServerRequest* req) {
   // Oldest first, so the browser can draw it left to right without thinking.
-  String out = "{\"rh\":[";
   uint16_t start = (hist.count < HIST_LEN)
                    ? 0 : hist.head;
+  String out = "{\"rh\":[";
   for (uint16_t i = 0; i < hist.count; i++) {
     uint16_t idx = (start + i) % HIST_LEN;
     if (i) out += ',';
     out += String(hist.rh[idx] / 10.0f, 1);
+  }
+  out += "],\"t\":[";
+  for (uint16_t i = 0; i < hist.count; i++) {
+    uint16_t idx = (start + i) % HIST_LEN;
+    if (i) out += ',';
+    out += String(hist.t[idx] / 10.0f, 1);
   }
   out += "]}";
   req->send(200, "application/json", out);
@@ -117,6 +145,13 @@ static void setupRoutes() {
   server.on("/api/state", HTTP_GET, sendState);
   server.on("/api/config", HTTP_GET, sendConfig);
   server.on("/api/history", HTTP_GET, sendHistory);
+
+  // Refill the hourly fog budget. The cap is a safety backstop, so this is a
+  // deliberate, confirmed action rather than something the UI does quietly.
+  server.on("/api/resetfog", HTTP_POST, [](AsyncWebServerRequest* r) {
+    ctrl::resetCredit();
+    r->send(200, "application/json", "{\"ok\":true}");
+  });
 
   server.on("/api/presets", HTTP_GET, [](AsyncWebServerRequest* r) {
     r->send(200, "application/json", presetsLoad());

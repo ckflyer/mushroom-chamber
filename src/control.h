@@ -136,6 +136,12 @@ inline void saveCredit() {
   _lastCreditSave = millis();
 }
 
+// Refill the hourly budget to full. Exposed for the dashboard's reset button.
+inline void resetCredit() {
+  st.fogCredit = cfg.fogBudgetS;
+  saveCredit();
+}
+
 inline float loadCredit(float dflt) {
   Preferences p;
   if (!p.begin("chamber", true)) return dflt;
